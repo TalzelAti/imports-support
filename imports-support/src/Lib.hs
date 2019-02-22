@@ -30,23 +30,24 @@ someFunc = execParser opts
             ( fullDesc
            <> progDesc "Run Import Support"
             )
-        options :: Parser SearchOpt
+        options :: Parser SearchOpts
         options = packageOpt
-              <|> directoryOpt
 
-        packageOpt :: Parser SearchOpt
-        packageOpt = PackageOpt <$> strOption
+        packageOpt :: Parser SearchOpts
+        packageOpt = SearchOpts <$>
+           strOption
             ( long "filepath"
-           <> short 'p'
-           <> showDefault
-           <> help "runs imports support on a package provided in path"
-            )
-        directoryOpt :: Parser SearchOpt
-        directoryOpt = DirectoryOpt <$> strOption
-            ( long "directory"
            <> short 'd'
            <> showDefault
-           <> help "runs imports support on all packages in directory (including subdirs)"
+           <> help "runs imports support on a package provided in path or directory"
+            )
+           <*> actionOpt
+        actionOpt :: Parser Action
+        actionOpt = actionFromPrint <$> switch
+            ( long "print"
+           <> short 'p'
+           <> showDefault
+           <> help "printsPath"
             )
 
     --moduleNames <- getImportsFromFile fp
@@ -55,24 +56,28 @@ someFunc = execParser opts
     --print $ map checkPackageImports fcs
     --print =<< listAllFiles "/home/talz/development/atidot/gapsight/gapsight-server"
 
-data SearchOpt = PackageOpt FilePath
-               | DirectoryOpt FilePath
+actionFromPrint True = PrintDir
+actionFromPrint _    = Modify
+
+data Action = PrintDir
+            | Modify
+
+data SearchOpts = SearchOpts FilePath Action
 
 
 
 -- ensure argument is a dir
 
 -- todo: ignore pack
-runCmd :: SearchOpt -> IO ()
-runCmd (DirectoryOpt dir) = do
-    pPrint $ "directories are not supported"
+runCmd :: SearchOpts -> IO ()
+runCmd (SearchOpts dir actionToTake) = do
     cwd <- getCurrentDirectory
-
     let path = cwd </> dir
-    pPrint $ path
     packages <- findPackagesRecursively path
-    pPrint $ packages
-runCmd (PackageOpt pkg) = updatePackageDeps pkg
+    let action = case actionToTake of
+            Modify -> updatePackageDeps
+            PrintDir -> pPrint
+    action packages
 
 data WorkTree = Package FilePath
               | Directory FilePath [WorkTree]
@@ -123,8 +128,10 @@ listFolders path =
 isPackageYaml = isSuffixOf "package.yaml"
 isCabalFile = isSuffixOf ".cabal"
 
-updatePackageDeps :: FilePath -> IO ()
-updatePackageDeps packagePath = do
+updatePackageDeps :: WorkTree -> IO ()
+updatePackageDeps (Directory _ pkgs) =
+    mapM_ updatePackageDeps pkgs
+updatePackageDeps (Package packagePath) = do
     files <- listAllFiles packagePath
     putStrLn $ "files:\n" ++ unlines files
     let haskellFiles = filter (isSuffixOf ".hs") files
