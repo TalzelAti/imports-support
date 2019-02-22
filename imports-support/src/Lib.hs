@@ -7,8 +7,10 @@ module Lib
 
 import           "directory"           System.Directory
 import           "base"                Data.List
+import           "base"                Data.Maybe
 import           "base"                Data.Monoid
 import           "base"                Control.Monad
+import           "extra"             Control.Monad.Extra
 import           "filepath"            System.FilePath
 import           "optparse-applicative"      Options.Applicative
 import           "pretty-simple"       Text.Pretty.Simple
@@ -22,7 +24,7 @@ lttrace a b = trace (a ++ ":" ++ show b) b
 
 someFunc :: IO ()
 someFunc = execParser opts
-    >>= updatePackageDeps
+    >>= runCmd
     where
         opts = info (options <**> helper)
             ( fullDesc
@@ -33,14 +35,14 @@ someFunc = execParser opts
               <|> directoryOpt
 
         packageOpt :: Parser SearchOpt
-        packageOpt = Package <$> strOption
+        packageOpt = PackageOpt <$> strOption
             ( long "filepath"
            <> short 'p'
            <> showDefault
            <> help "runs imports support on a package provided in path"
             )
         directoryOpt :: Parser SearchOpt
-        directoryOpt = Directory <$> strOption
+        directoryOpt = DirectoryOpt <$> strOption
             ( long "directory"
            <> short 'd'
            <> showDefault
@@ -48,25 +50,85 @@ someFunc = execParser opts
             )
 
     --moduleNames <- getImportsFromFile fp
-    --print $ map checkPackageImports fcs
     --print =<< listDirectory "."
     --updatePackageDeps "/home/talz/development/atidot/gapsight/gapsight-server"
+    --print $ map checkPackageImports fcs
     --print =<< listAllFiles "/home/talz/development/atidot/gapsight/gapsight-server"
 
-data SearchOpt = Package FilePath
-               | Directory FilePath
+data SearchOpt = PackageOpt FilePath
+               | DirectoryOpt FilePath
 
 
 
 -- ensure argument is a dir
 
 -- todo: ignore pack
+runCmd :: SearchOpt -> IO ()
+runCmd (DirectoryOpt dir) = do
+    pPrint $ "directories are not supported"
+    cwd <- getCurrentDirectory
 
-updatePackageDeps (Package packagePath) = do
+    let path = cwd </> dir
+    pPrint $ path
+    packages <- findPackagesRecursively path
+    pPrint $ packages
+runCmd (PackageOpt pkg) = updatePackageDeps pkg
+
+data WorkTree = Package FilePath
+              | Directory FilePath [WorkTree]
+              deriving (Show)
+
+
+findPackagesRecursively :: String -> IO WorkTree
+findPackagesRecursively dirpath = do
+    res <- findPackagesRecursively' dirpath
+    return $ fromMaybe err res
+    where
+        err = error $ "no packages hiding in directory :" ++ show dirpath
+        findPackagesRecursively' :: String -> IO (Maybe WorkTree)
+        findPackagesRecursively' path = do
+            isPackage <- isHaskellPackage path
+            if isPackage
+                then return $ Just $ Package path
+                else do
+                    folders <- listFolders' path
+                    mPackages <- mapM findPackagesRecursively' folders
+                    case catMaybes mPackages of
+                        [] -> return Nothing
+                        packages -> return $ Just $ Directory path packages
+
+isHiddenFolder path =
+    let (_, fileName) = splitFileName path
+    in isPrefixOf "." fileName
+
+isHaskellPackage :: FilePath -> IO Bool
+isHaskellPackage path = do
+    actualFiles <- listFiles path
+    return $ any (\f -> isPackageYaml f || isCabalFile f) actualFiles
+
+
+listFiles path =
+    map (path </>) <$> listDirectory path >>=
+        filterM (fmap not . doesDirectoryExist)
+
+listFolders' fp = filter (not . isHiddenFolder) <$> listFolders fp
+
+listFolders path =
+    map (path </>) <$> listDirectory path >>=
+        filterM doesDirectoryExist
+
+
+
+
+isPackageYaml = isSuffixOf "package.yaml"
+isCabalFile = isSuffixOf ".cabal"
+
+updatePackageDeps :: FilePath -> IO ()
+updatePackageDeps packagePath = do
     files <- listAllFiles packagePath
     putStrLn $ "files:\n" ++ unlines files
     let haskellFiles = filter (isSuffixOf ".hs") files
-        packageYamlFile = head $ filter (isSuffixOf "package.yaml") files
+        packageYamlFile = head $ filter isPackageYaml files
     alldependencies <- mapM getImportsFromFile haskellFiles
     let alldependencies' = nub $ concat alldependencies
     putStrLn $ "all Files Dependencies:\n" ++ unlines alldependencies'
