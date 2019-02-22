@@ -26,6 +26,7 @@ dependencies:
 - filepath
 - optparse-applicative
 - pretty-simple
+- uniplate
 
 library:
   source-dirs: src

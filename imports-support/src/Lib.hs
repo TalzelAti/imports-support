@@ -1,6 +1,6 @@
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE OverloadedStrings #-}
-
+{-# LANGUAGE DeriveDataTypeable #-}
 module Lib
     ( someFunc
     ) where
@@ -8,14 +8,18 @@ module Lib
 import           "directory"           System.Directory
 import           "base"                Data.List
 import           "base"                Data.Maybe
+import           "base"                Data.Typeable
+import           "base"                Data.Data
 import           "base"                Data.Monoid
 import           "base"                Control.Monad
 import           "extra"             Control.Monad.Extra
-import           "filepath"            System.FilePath
 import           "optparse-applicative"      Options.Applicative
 import           "pretty-simple"       Text.Pretty.Simple
+import           "uniplate"         Data.Generics.Uniplate.Data
 
 
+
+import           "filepath"            System.FilePath
 import Debug.Trace
 
 lttrace a b = trace (a ++ ":" ++ show b) b
@@ -65,7 +69,6 @@ data Action = PrintDir
 data SearchOpts = SearchOpts FilePath Action
 
 
-
 -- ensure argument is a dir
 
 -- todo: ignore pack
@@ -74,14 +77,24 @@ runCmd (SearchOpts dir actionToTake) = do
     cwd <- getCurrentDirectory
     let path = cwd </> dir
     packages <- findPackagesRecursively path
-    let action = case actionToTake of
-            Modify -> updatePackageDeps
-            PrintDir -> pPrint
-    action packages
+    --let action = case actionToTake of
+    --        Modify -> return-- updatePackageDeps
+    --        PrintDir -> pPrint
+    --action $ packages
+    packages' <- prepare packages
+    pPrint "------------------------------"
+    --pPrint packages'
 
-data WorkTree = Package FilePath
-              | Directory FilePath [WorkTree]
-              deriving (Show)
+prepare :: (Show a, Data a) => WorkTreeA a -> IO (WorkTreeA a)
+prepare packages = do
+    pPrint $ universe packages
+    return packages
+
+type WorkTree = WorkTreeA ()
+
+data WorkTreeA annot = Package annot FilePath
+                     | Directory annot FilePath [WorkTree]
+                    deriving (Show, Data, Typeable)
 
 findPackagesRecursively :: String -> IO WorkTree
 findPackagesRecursively dirpath = do
@@ -93,13 +106,13 @@ findPackagesRecursively dirpath = do
         findPackagesRecursively' path = do
             isPackage <- isHaskellPackage path
             if isPackage
-                then return $ Just $ Package path
+                then return $ Just $ Package () path
                 else do
                     folders <- listFolders' path
                     mPackages <- mapM findPackagesRecursively' folders
                     case catMaybes mPackages of
                         [] -> return Nothing
-                        packages -> return $ Just $ Directory path packages
+                        packages -> return $ Just $ Directory () path packages
 
 isHiddenFolder path =
     let (_, fileName) = splitFileName path
@@ -125,10 +138,10 @@ listFolders path =
 isPackageYaml = isSuffixOf "package.yaml"
 isCabalFile = isSuffixOf ".cabal"
 
-updatePackageDeps :: WorkTree -> IO ()
-updatePackageDeps (Directory _ pkgs) =
+updatePackageDeps :: WorkTreeA a -> IO ()
+updatePackageDeps (Directory _ _ pkgs) =
     mapM_ updatePackageDeps pkgs
-updatePackageDeps (Package packagePath) = do
+updatePackageDeps (Package _ packagePath) = do
     files <- listAllFiles packagePath
     putStrLn $ "files:\n" ++ unlines files
     let haskellFiles = filter (isSuffixOf ".hs") files
