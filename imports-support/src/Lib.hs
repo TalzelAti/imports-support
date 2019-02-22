@@ -22,7 +22,7 @@ import           "uniplate"         Data.Generics.Uniplate.Data
 import           "base"               Data.Foldable
 import           "base"               Control.Arrow
 import           "base"               System.IO
-
+import                                Types
 
 
 import           "filepath"            System.FilePath
@@ -69,13 +69,7 @@ someFunc = execParser opts
     --print $ map checkPackageImports fcs
     --print =<< listAllFiles "/home/talz/development/atidot/gapsight/gapsight-server"
 
-actionFromPrint True = PrintDir
-actionFromPrint _    = Modify
 
-data Action = PrintDir
-            | Modify
-
-data SearchOpts = SearchOpts FilePath Action
 
 
 -- ensure argument is a dir
@@ -104,9 +98,7 @@ prepare packages =
                          , transformBiM annotatePackage
                          ]
 
-data WorkTree = Package Annotation FilePath
-              | Directory Annotation FilePath [WorkTree]
-                    deriving (Show, Data, Typeable)
+
 
 
 
@@ -197,20 +189,6 @@ updatePackageDeps (Package _ packagePath) = do
     putStrLn $ "modified content:\n" ++ modifiedContent
     writeFile packageYamlFile modifiedContent
 
-data Annotation = PackageAnnot [FileAnnot]
-                | ErrMsg String
-                | NoAnnotation
-                | PkgsFileMods FilePath [String]
-                deriving (Show,Data,Typeable)
-
-data FileAnnot =
-    HsFileAnnot
-        { faName :: FilePath
-        , faHasPackageImports ::Bool
-        , faImportsList :: [String]
-        }
-    | PkgsYaml String
-    deriving (Show,Data,Typeable)
 
 
 
