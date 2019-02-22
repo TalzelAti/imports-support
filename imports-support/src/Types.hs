@@ -11,6 +11,7 @@ data Action = PrintDir
 
 data SearchOpts = SearchOpts FilePath Action
 
+actionFromPrint :: Bool -> Action
 actionFromPrint True = PrintDir
 actionFromPrint _    = Modify
 

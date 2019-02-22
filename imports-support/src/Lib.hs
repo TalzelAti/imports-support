@@ -11,29 +11,30 @@ module Lib
 import           "directory"           System.Directory
 import           "base"                Data.List
 import           "base"                Data.Maybe
-import           "base"                Data.Typeable
-import           "base"                Data.Data
-import           "base"                Data.Monoid
 import           "base"                Control.Monad
-import           "extra"             Control.Monad.Extra
 import           "optparse-applicative"      Options.Applicative
 import           "pretty-simple"       Text.Pretty.Simple
 import           "uniplate"         Data.Generics.Uniplate.Data
 import           "base"               Data.Foldable
 import           "base"               Control.Arrow
-import           "base"               System.IO
-import                                Types
-
-
+import           "text"                     Data.Text (Text)
 import           "filepath"            System.FilePath
-import Debug.Trace
+import                                Types
+--import           "base"                Data.Monoid
+--import           "base"               System.IO
+--import           "extra"             Control.Monad.Extra
 
-lttrace a b = trace (a ++ ":" ++ show b) b
 
--- add flag to run on full directories and scan haskell packages in them
+--import Debug.Trace
+--lttrace a b = trace (a ++ ":" ++ show b) b
 
--- todo: fix the conduit thingy
---
+-- todo: print mode and execution mode
+-- todo: remove file print before modification, use conduit instead of io
+-- todo: deal with comments
+-- todo: deal with multilines
+-- todo: deal with qualified imports
+-- todo: imports formatter
+-- todo: importify file (add package imports and labels)
 
 someFunc :: IO ()
 someFunc = execParser opts
@@ -63,30 +64,15 @@ someFunc = execParser opts
            <> help "printsPath"
             )
 
-    --moduleNames <- getImportsFromFile fp
-    --print =<< listDirectory "."
-    --updatePackageDeps "/home/talz/development/atidot/gapsight/gapsight-server"
-    --print $ map checkPackageImports fcs
-    --print =<< listAllFiles "/home/talz/development/atidot/gapsight/gapsight-server"
 
 
-
-
--- ensure argument is a dir
-
--- todo: ignore pack
 runCmd :: SearchOpts -> IO ()
-runCmd (SearchOpts dir actionToTake) = do
+runCmd (SearchOpts dir _actionToTake) = do
     cwd <- getCurrentDirectory
     let path = cwd </> dir
     packages <- findPackagesRecursively path
-    --let action = case actionToTake of
-    --        Modify -> return-- updatePackageDeps
-    --        PrintDir -> pPrint
-    --action $ packages
     packages' <- prepare packages
-    pPrint "------------------------------"
-    --pPrint packages'
+    pPrint ("------------------------------" :: Text)
     executePackageModification packages'
 
 prepare :: WorkTree -> IO WorkTree
@@ -97,14 +83,6 @@ prepare packages =
             transforms = [ transformBiM getPkgsModifications
                          , transformBiM annotatePackage
                          ]
-
-
-
-
-
-
-
-
 
 findPackagesRecursively :: String -> IO WorkTree
 findPackagesRecursively dirpath = do
@@ -124,6 +102,7 @@ findPackagesRecursively dirpath = do
                         [] -> return Nothing
                         packages -> return $ Just $ Directory NoAnnotation path packages
 
+isHiddenFolder :: [Char] -> Bool
 isHiddenFolder path =
     let (_, fileName) = splitFileName path
     in isPrefixOf "." fileName
@@ -133,25 +112,24 @@ isHaskellPackage path = do
     actualFiles <- listFiles path
     return $ any (\f -> isPackageYaml f || isCabalFile f) actualFiles
 
-
+listFiles :: FilePath -> IO [FilePath]
 listFiles path =
     map (path </>) <$> listDirectory path >>=
         filterM (fmap not . doesDirectoryExist)
-
+listFolders' :: FilePath -> IO [[Char]]
 listFolders' fp = filter (not . isHiddenFolder) <$> listFolders fp
 
+listFolders :: FilePath -> IO [FilePath]
 listFolders path =
     map (path </>) <$> listDirectory path >>=
         filterM doesDirectoryExist
 
-
+isPackageYaml :: [Char] -> Bool
 isPackageYaml = isSuffixOf "package.yaml"
+isCabalFile :: [Char] -> Bool
 isCabalFile = isSuffixOf ".cabal"
 
--- add yaml files annotations
--- add modifications
--- add transform from annotations to modifications
--- execute modifications
+
 
 annotatePackage :: WorkTree -> IO WorkTree
 annotatePackage (Directory _ nm subdirs) = return $ Directory NoAnnotation nm subdirs
@@ -168,35 +146,6 @@ annotatePackage (Package _ packagePath) = do
             Just f  -> PackageAnnot (PkgsYaml f:fsAnns)
             Nothing -> ErrMsg $ "No stack file in package: " ++ show packagePath
     return $ Package annot packagePath
-
-updatePackageDeps :: WorkTree -> IO ()
-updatePackageDeps (Directory _ _ pkgs) =
-    mapM_ updatePackageDeps pkgs
-updatePackageDeps (Package _ packagePath) = do
-    files <- listAllFiles packagePath
-    putStrLn $ "files:\n" ++ unlines files
-    let haskellFiles = filter (isSuffixOf ".hs") files
-        mPackageYamlFile = listToMaybe $ filter isPackageYaml files
-    packageYamlFile <- case mPackageYamlFile of
-            Just f -> return f
-            Nothing -> error $ "No stack file in package: " ++ show packagePath
-    alldependencies <- mapM getImportsFromFile haskellFiles
-    let alldependencies' = nub $ concat alldependencies
-    putStrLn $ "all Files Dependencies:\n" ++ unlines alldependencies'
-    packageYamlContent <- readFile packageYamlFile
-    putStrLn $ "original content:\n" ++ packageYamlContent
-    let modifiedContent = modifyPackagesSection alldependencies' packageYamlContent
-    putStrLn $ "modified content:\n" ++ modifiedContent
-    writeFile packageYamlFile modifiedContent
-
-
-
-
--- todo: deal with versions
--- todo: tests and appSystem.FilePath
--- todo: literate haskell
--- todo: allow only with package imports
--- ensure package.yaml existence
 
 getPkgsModifications :: WorkTree -> IO WorkTree
 getPkgsModifications (Package (PackageAnnot (PkgsYaml pyfp:hsfs)) path) = do
@@ -235,6 +184,7 @@ modifyPackagesSection packages fileContent =
 getDependenciesBlock :: [String] -> [String]
 getDependenciesBlock = takeWhile isYamlListElem . tail . dropWhile (not . isDependenciesHdr)
 
+isYamlListElem :: [Char] -> Bool
 isYamlListElem = isPrefixOf "- "
 
 isDependenciesHdr :: String -> Bool
@@ -243,22 +193,12 @@ isDependenciesHdr = isPrefixOf "dependencies:"
 isPackageImports :: String -> Bool
 isPackageImports =  (["{-#","LANGUAGE","PackageImports","#-}"] ==) . words
 
-getImports :: String -> [String]
-getImports content = findImportLines . lines $ content
-
 findImportLines :: [String] -> [String]
 findImportLines = takeWhile isImport . dropWhile (not . isImport) . filter (not . null)
     where isImport = isPrefixOf "import"
-          isModule = isPrefixOf "module"
 
 getPackageNames :: [String] -> [String]
 getPackageNames = nub . removeBaseModule . map takePackageDeclrs . filter hasPackageDclr
-
-getImportsFromFile :: FilePath -> IO [String]
-getImportsFromFile fp = getImports <$> readFile fp
-    where
-        getImports :: String -> [String]
-        getImports = nub . removeBaseModule . map takePackageDeclrs . filter hasPackageDclr . findImportLines . lines
 
 
 takePackageDeclrs :: String -> String
@@ -267,18 +207,14 @@ takePackageDeclrs = filter ('"' /=) . head . tail . words
 hasPackageDclr :: String -> Bool
 hasPackageDclr = any ('"' ==)
 
+removeBaseModule :: [String] -> [String]
 removeBaseModule = filter ("base" /=)
 
 listAllFiles :: FilePath -> IO [FilePath]
 listAllFiles dirpath = do
-    --pPrint $ "dirpath"
-    --pPrint $ dirpath
     directoryFiles <- map (dirpath </>) <$> listDirectory dirpath
     actualFiles <- filterM (fmap not . doesDirectoryExist) directoryFiles
-    --absolutePaths <- mapM makeAbsolute actualFiles
     folders <- filterM doesDirectoryExist directoryFiles
     let folders' = filter (not . isHiddenFolder) folders
-    --putStrLn $ "directories:"
-    --pPrint folders'
     subfiles <- mapM listAllFiles folders'
     return $ reverse $ actualFiles ++ concat subfiles

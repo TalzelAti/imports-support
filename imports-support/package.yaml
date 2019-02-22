@@ -26,10 +26,14 @@ dependencies:
 - filepath
 - optparse-applicative
 - pretty-simple
+- text
 - uniplate
 
 library:
   source-dirs: src
+  ghc-options:
+    - -Wall
+    - -Werror
 
 executables:
   imports-support-exe:
