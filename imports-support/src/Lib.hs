@@ -19,6 +19,9 @@ import           "extra"             Control.Monad.Extra
 import           "optparse-applicative"      Options.Applicative
 import           "pretty-simple"       Text.Pretty.Simple
 import           "uniplate"         Data.Generics.Uniplate.Data
+import           "base"               Data.Foldable
+import           "base"               Control.Arrow
+import           "base"               System.IO
 
 
 
@@ -28,6 +31,9 @@ import Debug.Trace
 lttrace a b = trace (a ++ ":" ++ show b) b
 
 -- add flag to run on full directories and scan haskell packages in them
+
+-- todo: fix the conduit thingy
+--
 
 someFunc :: IO ()
 someFunc = execParser opts
@@ -87,20 +93,21 @@ runCmd (SearchOpts dir actionToTake) = do
     packages' <- prepare packages
     pPrint "------------------------------"
     --pPrint packages'
+    executePackageModification packages'
 
 prepare :: WorkTree -> IO WorkTree
-prepare packages = do
-    let packages' = setEmptyAnnots packages
-    packages'' <- transformBiM annotatePackage packages'
-    pPrint packages''
-    return packages
+prepare packages =
+    foldrM ($) packages transforms
+         where
+            transforms :: [WorkTree -> IO WorkTree]
+            transforms = [ transformBiM getPkgsModifications
+                         , transformBiM annotatePackage
+                         ]
 
-
-data WorkTreeA annot = Package annot FilePath
-                     | Directory annot FilePath [WorkTreeA annot]
+data WorkTree = Package Annotation FilePath
+              | Directory Annotation FilePath [WorkTree]
                     deriving (Show, Data, Typeable)
 
-type WorkTree = WorkTreeA ()
 
 
 
@@ -117,13 +124,13 @@ findPackagesRecursively dirpath = do
         findPackagesRecursively' path = do
             isPackage <- isHaskellPackage path
             if isPackage
-                then return $ Just $ Package () path
+                then return $ Just $ Package NoAnnotation path
                 else do
                     folders <- listFolders' path
                     mPackages <- mapM findPackagesRecursively' folders
                     case catMaybes mPackages of
                         [] -> return Nothing
-                        packages -> return $ Just $ Directory () path packages
+                        packages -> return $ Just $ Directory NoAnnotation path packages
 
 isHiddenFolder path =
     let (_, fileName) = splitFileName path
@@ -153,36 +160,24 @@ isCabalFile = isSuffixOf ".cabal"
 -- add modifications
 -- add transform from annotations to modifications
 -- execute modifications
-type AnnotatedWorkTree = WorkTreeA (Maybe [FileAnnot])
 
-
-data FileAnnot = HsFileAnnot
-    { faName :: FilePath
-    , faHasPackageImports ::Bool
-    , faImportsList :: [String]
-    } deriving (Show,Data,Typeable)
-
-setEmptyAnnots :: WorkTree -> AnnotatedWorkTree
-setEmptyAnnots (Directory _ nm subdirs) =
-    Directory Nothing nm $ map setEmptyAnnots subdirs
-setEmptyAnnots (Package _ packagePath) = Package Nothing packagePath
-
-annotatePackage :: AnnotatedWorkTree -> IO AnnotatedWorkTree
-annotatePackage (Directory _ nm subdirs) = return $ Directory Nothing nm subdirs
+annotatePackage :: WorkTree -> IO WorkTree
+annotatePackage (Directory _ nm subdirs) = return $ Directory NoAnnotation nm subdirs
 annotatePackage (Package _ packagePath) = do
     files <- listAllFiles packagePath
     let haskellFiles = filter (isSuffixOf ".hs") files
         mPackageYamlFile = listToMaybe $ filter isPackageYaml files
-    packageYamlFile <- case mPackageYamlFile of
-            Just f -> return f
-            Nothing -> error $ "No stack file in package: " ++ show packagePath
     fsAnns <- forM haskellFiles $ \hsFile -> do
-        importsList <- getImportsFromFile hsFile -- optimize the readFile call
-        hasPackageImports <- any isPackageImports . lines <$> readFile hsFile
+        hsFileContent <- readFile hsFile
+        let importsList = findImportLines . lines $  hsFileContent -- optimize the readFile call
+            hasPackageImports = any isPackageImports . lines $ hsFileContent
         return $ HsFileAnnot hsFile hasPackageImports importsList
-    return $ Package (Just fsAnns) packagePath
+    let annot = case mPackageYamlFile of
+            Just f  -> PackageAnnot (PkgsYaml f:fsAnns)
+            Nothing -> ErrMsg $ "No stack file in package: " ++ show packagePath
+    return $ Package annot packagePath
 
-updatePackageDeps :: WorkTreeA a -> IO ()
+updatePackageDeps :: WorkTree -> IO ()
 updatePackageDeps (Directory _ _ pkgs) =
     mapM_ updatePackageDeps pkgs
 updatePackageDeps (Package _ packagePath) = do
@@ -202,11 +197,49 @@ updatePackageDeps (Package _ packagePath) = do
     putStrLn $ "modified content:\n" ++ modifiedContent
     writeFile packageYamlFile modifiedContent
 
+data Annotation = PackageAnnot [FileAnnot]
+                | ErrMsg String
+                | NoAnnotation
+                | PkgsFileMods FilePath [String]
+                deriving (Show,Data,Typeable)
+
+data FileAnnot =
+    HsFileAnnot
+        { faName :: FilePath
+        , faHasPackageImports ::Bool
+        , faImportsList :: [String]
+        }
+    | PkgsYaml String
+    deriving (Show,Data,Typeable)
+
+
+
 -- todo: deal with versions
 -- todo: tests and appSystem.FilePath
 -- todo: literate haskell
 -- todo: allow only with package imports
 -- ensure package.yaml existence
+
+getPkgsModifications :: WorkTree -> IO WorkTree
+getPkgsModifications (Package (PackageAnnot (PkgsYaml pyfp:hsfs)) path) = do
+    let packagesList = nub $ concatMap getPackageNames $
+            map snd $ filter fst $
+            map (faHasPackageImports &&& faImportsList) hsfs
+    return $ Package (PkgsFileMods pyfp packagesList) path
+getPkgsModifications dir = return dir
+
+executePackageModification :: WorkTree -> IO ()
+executePackageModification wt = do
+    let mods = universeBi wt
+    pPrint mods
+    mapM_ worker $ mods
+        where
+            worker (PkgsFileMods fp pkgs) = do
+                packageYamlContent <- readFile fp
+                let modifiedContent = modifyPackagesSection pkgs packageYamlContent
+                pPrint packageYamlContent
+                writeFile fp $ modifiedContent
+            worker _ = return ()
 
 modifyPackagesSection :: [String] -> String -> String
 modifyPackagesSection packages fileContent =
@@ -232,22 +265,31 @@ isDependenciesHdr = isPrefixOf "dependencies:"
 isPackageImports :: String -> Bool
 isPackageImports =  (["{-#","LANGUAGE","PackageImports","#-}"] ==) . words
 
+getImports :: String -> [String]
+getImports content = findImportLines . lines $ content
+
+findImportLines :: [String] -> [String]
+findImportLines = takeWhile isImport . dropWhile (not . isImport) . filter (not . null)
+    where isImport = isPrefixOf "import"
+          isModule = isPrefixOf "module"
+
+getPackageNames :: [String] -> [String]
+getPackageNames = nub . removeBaseModule . map takePackageDeclrs . filter hasPackageDclr
+
 getImportsFromFile :: FilePath -> IO [String]
 getImportsFromFile fp = getImports <$> readFile fp
     where
         getImports :: String -> [String]
         getImports = nub . removeBaseModule . map takePackageDeclrs . filter hasPackageDclr . findImportLines . lines
 
-        findImportLines :: [String] -> [String]
-        findImportLines = takeWhile isImport . dropWhile (not . isImport)
-            where isImport = isPrefixOf "import"
 
-        takePackageDeclrs :: String -> String
-        takePackageDeclrs = filter ('"' /=) . head . tail . words
+takePackageDeclrs :: String -> String
+takePackageDeclrs = filter ('"' /=) . head . tail . words
 
-        hasPackageDclr :: String -> Bool
-        hasPackageDclr = any ('"' ==)
-        removeBaseModule = filter ("base" /=)
+hasPackageDclr :: String -> Bool
+hasPackageDclr = any ('"' ==)
+
+removeBaseModule = filter ("base" /=)
 
 listAllFiles :: FilePath -> IO [FilePath]
 listAllFiles dirpath = do
