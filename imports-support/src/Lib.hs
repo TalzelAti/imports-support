@@ -83,7 +83,6 @@ data WorkTree = Package FilePath
               | Directory FilePath [WorkTree]
               deriving (Show)
 
-
 findPackagesRecursively :: String -> IO WorkTree
 findPackagesRecursively dirpath = do
     res <- findPackagesRecursively' dirpath
@@ -123,8 +122,6 @@ listFolders path =
         filterM doesDirectoryExist
 
 
-
-
 isPackageYaml = isSuffixOf "package.yaml"
 isCabalFile = isSuffixOf ".cabal"
 
@@ -135,7 +132,10 @@ updatePackageDeps (Package packagePath) = do
     files <- listAllFiles packagePath
     putStrLn $ "files:\n" ++ unlines files
     let haskellFiles = filter (isSuffixOf ".hs") files
-        packageYamlFile = head $ filter isPackageYaml files
+        mPackageYamlFile = listToMaybe $ filter isPackageYaml files
+    packageYamlFile <- case mPackageYamlFile of
+            Just f -> return f
+            Nothing -> error $ "No stack file in package: " ++ show packagePath
     alldependencies <- mapM getImportsFromFile haskellFiles
     let alldependencies' = nub $ concat alldependencies
     putStrLn $ "all Files Dependencies:\n" ++ unlines alldependencies'
