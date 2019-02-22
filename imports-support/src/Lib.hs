@@ -1,6 +1,9 @@
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
+
 module Lib
     ( someFunc
     ) where
@@ -85,16 +88,24 @@ runCmd (SearchOpts dir actionToTake) = do
     pPrint "------------------------------"
     --pPrint packages'
 
-prepare :: (Show a, Data a) => WorkTreeA a -> IO (WorkTreeA a)
+prepare :: WorkTree -> IO WorkTree
 prepare packages = do
-    pPrint $ universe packages
+    let packages' = setEmptyAnnots packages
+    packages'' <- transformBiM annotatePackage packages'
+    pPrint packages''
     return packages
+
+
+data WorkTreeA annot = Package annot FilePath
+                     | Directory annot FilePath [WorkTreeA annot]
+                    deriving (Show, Data, Typeable)
 
 type WorkTree = WorkTreeA ()
 
-data WorkTreeA annot = Package annot FilePath
-                     | Directory annot FilePath [WorkTree]
-                    deriving (Show, Data, Typeable)
+
+
+
+
 
 findPackagesRecursively :: String -> IO WorkTree
 findPackagesRecursively dirpath = do
@@ -137,6 +148,39 @@ listFolders path =
 
 isPackageYaml = isSuffixOf "package.yaml"
 isCabalFile = isSuffixOf ".cabal"
+
+-- add yaml files annotations
+-- add modifications
+-- add transform from annotations to modifications
+-- execute modifications
+type AnnotatedWorkTree = WorkTreeA (Maybe [FileAnnot])
+
+
+data FileAnnot = HsFileAnnot
+    { faName :: FilePath
+    , faHasPackageImports ::Bool
+    , faImportsList :: [String]
+    } deriving (Show,Data,Typeable)
+
+setEmptyAnnots :: WorkTree -> AnnotatedWorkTree
+setEmptyAnnots (Directory _ nm subdirs) =
+    Directory Nothing nm $ map setEmptyAnnots subdirs
+setEmptyAnnots (Package _ packagePath) = Package Nothing packagePath
+
+annotatePackage :: AnnotatedWorkTree -> IO AnnotatedWorkTree
+annotatePackage (Directory _ nm subdirs) = return $ Directory Nothing nm subdirs
+annotatePackage (Package _ packagePath) = do
+    files <- listAllFiles packagePath
+    let haskellFiles = filter (isSuffixOf ".hs") files
+        mPackageYamlFile = listToMaybe $ filter isPackageYaml files
+    packageYamlFile <- case mPackageYamlFile of
+            Just f -> return f
+            Nothing -> error $ "No stack file in package: " ++ show packagePath
+    fsAnns <- forM haskellFiles $ \hsFile -> do
+        importsList <- getImportsFromFile hsFile -- optimize the readFile call
+        hasPackageImports <- any isPackageImports . lines <$> readFile hsFile
+        return $ HsFileAnnot hsFile hasPackageImports importsList
+    return $ Package (Just fsAnns) packagePath
 
 updatePackageDeps :: WorkTreeA a -> IO ()
 updatePackageDeps (Directory _ _ pkgs) =
@@ -185,14 +229,14 @@ isYamlListElem = isPrefixOf "- "
 isDependenciesHdr :: String -> Bool
 isDependenciesHdr = isPrefixOf "dependencies:"
 
+isPackageImports :: String -> Bool
+isPackageImports =  (["{-#","LANGUAGE","PackageImports","#-}"] ==) . words
+
 getImportsFromFile :: FilePath -> IO [String]
 getImportsFromFile fp = getImports <$> readFile fp
     where
         getImports :: String -> [String]
         getImports = nub . removeBaseModule . map takePackageDeclrs . filter hasPackageDclr . findImportLines . lines
-
-        checkPackageImports :: String -> Bool
-        checkPackageImports =  (["{-#","LANGUAGE","PackageImports","#-}"] ==) . words
 
         findImportLines :: [String] -> [String]
         findImportLines = takeWhile isImport . dropWhile (not . isImport)
@@ -207,13 +251,14 @@ getImportsFromFile fp = getImports <$> readFile fp
 
 listAllFiles :: FilePath -> IO [FilePath]
 listAllFiles dirpath = do
-    pPrint $ "dirpath"
-    pPrint $ dirpath
+    --pPrint $ "dirpath"
+    --pPrint $ dirpath
     directoryFiles <- map (dirpath </>) <$> listDirectory dirpath
     actualFiles <- filterM (fmap not . doesDirectoryExist) directoryFiles
     --absolutePaths <- mapM makeAbsolute actualFiles
     folders <- filterM doesDirectoryExist directoryFiles
-    putStrLn $ "directories:"
-    pPrint folders
-    subfiles <- mapM listAllFiles folders
+    let folders' = filter (not . isHiddenFolder) folders
+    --putStrLn $ "directories:"
+    --pPrint folders'
+    subfiles <- mapM listAllFiles folders'
     return $ reverse $ actualFiles ++ concat subfiles
