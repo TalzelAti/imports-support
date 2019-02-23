@@ -35,14 +35,13 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
 --import Debug.Trace
 --lttrace a b = trace (a ++ ":" ++ show b) b
 
--- todo: unique temp names
 -- todo: deal with comments
 -- todo: deal with multilines
 -- todo: deal with qualified imports
 -- todo: add option to remove redundant files from package.yml
 -- todo: imports formatter
 -- todo: importify file (add package imports and labels)
--- todo: improve errors handling
+-- todo: unique temp names
 
 someFunc :: IO ()
 someFunc = execParser opts
@@ -172,7 +171,7 @@ annotatePackage (Package packagePath _) = do
         return $ HsFileAnnot hsFile hasPackageImports importsList
     let annot = case mPackageYamlFile of
             Just f  -> PackageAnnot (PkgsYaml f:fsAnns)
-            Nothing -> ErrMsg $ "No stack file in package: " ++ show packagePath
+            Nothing -> ErrMsg $ "Error: No stack file in package: " ++ show packagePath
     return $ Package packagePath annot
 
 getPkgsModifications :: WorkTree -> IO WorkTree
@@ -188,6 +187,7 @@ executePackageModification copyOnly wt =
     mapM_ worker $ mods
         where
             mods = universeBi wt
+            worker (ErrMsg err) = pPrint err
             worker (PkgsFileMods fp pkgs) = do
                 packageYamlContent <- readFile fp
                 let modifiedContent = modifyPackagesSection pkgs packageYamlContent
