@@ -37,7 +37,7 @@ data FileAnnot =
     deriving (Show,Data,Typeable)
 
 prefixHeader :: String
-prefixHeader = "._IS_"
+prefixHeader = "_IS_tmp_file_"
 
 addTempPrefix :: FilePath -> FilePath
 addTempPrefix fp

@@ -68,7 +68,7 @@ someFunc = execParser opts
             ( long "print"
            <> short 'p'
            <> showDefault
-           <> help "printsPath"
+           <> help "prints execution plan for path, and generates tempFiles"
             )
 
 
@@ -82,7 +82,7 @@ runCmd (SearchOpts dir actionToTake) = do
         Execute -> do
             packages' <- prepare packages
             pPrint ("------------------------------" :: Text)
-            executePackageModification packages'
+            executePackageModification False packages'
         PrintPlan -> do
             reports <- prepareReport packages
             putStrLn "Printing Modifications Plan"
@@ -91,6 +91,7 @@ runCmd (SearchOpts dir actionToTake) = do
                 putStrLn ""
                 pPrint tree
                 putStrLn ""
+                executePackageModification True $ snd $ last reports
 
 
 prepareReport :: WorkTree -> IO [(String,WorkTree)]
@@ -181,19 +182,22 @@ getPkgsModifications (Package (PackageAnnot (PkgsYaml pyfp:hsfs)) path) = do
     return $ Package (PkgsFileMods pyfp packagesList) path
 getPkgsModifications dir = return dir
 
-executePackageModification :: WorkTree -> IO ()
-executePackageModification wt = do
-    let mods = universeBi wt
-    pPrint mods
+executePackageModification :: Bool -> WorkTree -> IO ()
+executePackageModification copyOnly wt =
     mapM_ worker $ mods
         where
+            mods = universeBi wt
             worker (PkgsFileMods fp pkgs) = do
                 packageYamlContent <- readFile fp
                 let modifiedContent = modifyPackagesSection pkgs packageYamlContent
                     tempFile = addTempPrefix fp
                 writeFile tempFile $ modifiedContent
-                copyFile tempFile fp
-                removeIfExists tempFile
+                if copyOnly
+                    then
+                        pPrint mods
+                    else do
+                        copyFile tempFile fp
+                        removeIfExists tempFile
             worker _ = return ()
 
 modifyPackagesSection :: [String] -> String -> String
