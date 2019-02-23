@@ -35,7 +35,7 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
 --import Debug.Trace
 --lttrace a b = trace (a ++ ":" ++ show b) b
 
--- todo: remove file print before modification, use conduit instead of io
+-- todo: unique temp names
 -- todo: deal with comments
 -- todo: deal with multilines
 -- todo: deal with qualified imports
@@ -191,6 +191,7 @@ executePackageModification copyOnly wt =
                 packageYamlContent <- readFile fp
                 let modifiedContent = modifyPackagesSection pkgs packageYamlContent
                     tempFile = addTempPrefix fp
+                removeIfExists tempFile
                 writeFile tempFile $ modifiedContent
                 if copyOnly
                     then
