@@ -15,7 +15,7 @@ import           "base"                Control.Monad
 import           "optparse-applicative"      Options.Applicative
 import           "pretty-simple"       Text.Pretty.Simple
 import           "uniplate"         Data.Generics.Uniplate.Data
-import           "base"               Data.Foldable
+--import           "base"               Data.Foldable
 import           "base"               Control.Arrow
 import           "text"                     Data.Text (Text)
 import           "filepath"            System.FilePath
@@ -39,6 +39,7 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
 -- todo: deal with comments
 -- todo: deal with multilines
 -- todo: deal with qualified imports
+-- todo: add option to remove redundant files from package.yml
 -- todo: imports formatter
 -- todo: importify file (add package imports and labels)
 -- todo: improve errors handling
@@ -81,7 +82,6 @@ runCmd (SearchOpts dir actionToTake) = do
     case actionToTake of
         Execute -> do
             packages' <- prepare packages
-            pPrint ("------------------------------" :: Text)
             executePackageModification False packages'
         PrintPlan -> do
             reports <- prepareReport packages
@@ -90,6 +90,8 @@ runCmd (SearchOpts dir actionToTake) = do
                 putStrLn ("### " ++ hdr )
                 putStrLn ""
                 pPrint tree
+                putStrLn ""
+                pPrint ("############################" :: Text)
                 putStrLn ""
                 executePackageModification True $ snd $ last reports
 
@@ -103,8 +105,7 @@ prepareReport packages = foldM worker [("initial",packages)] $ wtTransforms
             return $ stgs ++ [(hdr, currentStage)]
 
 prepare :: WorkTree -> IO WorkTree
-prepare packages =
-    foldrM ($) packages $ map snd $ reverse wtTransforms
+prepare packages = snd . last <$> prepareReport packages
 
 wtTransforms :: [(String,WorkTree -> IO WorkTree)]
 wtTransforms = [ ("annotatePackage", transformBiM annotatePackage)
@@ -121,13 +122,13 @@ findPackagesRecursively dirpath = do
         findPackagesRecursively' path = do
             isPackage <- isHaskellPackage path
             if isPackage
-                then return $ Just $ Package NoAnnotation path
+                then return $ Just $ Package path NoAnnotation
                 else do
                     folders <- listFolders' path
                     mPackages <- mapM findPackagesRecursively' folders
                     case catMaybes mPackages of
                         [] -> return Nothing
-                        packages -> return $ Just $ Directory NoAnnotation path packages
+                        packages -> return $ Just $ Directory path NoAnnotation packages
 
 isHiddenFolder :: [Char] -> Bool
 isHiddenFolder path =
@@ -159,8 +160,8 @@ isCabalFile = isSuffixOf ".cabal"
 
 
 annotatePackage :: WorkTree -> IO WorkTree
-annotatePackage (Directory _ nm subdirs) = return $ Directory NoAnnotation nm subdirs
-annotatePackage (Package _ packagePath) = do
+annotatePackage (Directory nm _ subdirs) = return $ Directory nm NoAnnotation subdirs
+annotatePackage (Package packagePath _) = do
     files <- listAllFiles packagePath
     let haskellFiles = filter (isSuffixOf ".hs") files
         mPackageYamlFile = listToMaybe $ filter isPackageYaml files
@@ -172,14 +173,14 @@ annotatePackage (Package _ packagePath) = do
     let annot = case mPackageYamlFile of
             Just f  -> PackageAnnot (PkgsYaml f:fsAnns)
             Nothing -> ErrMsg $ "No stack file in package: " ++ show packagePath
-    return $ Package annot packagePath
+    return $ Package packagePath annot
 
 getPkgsModifications :: WorkTree -> IO WorkTree
-getPkgsModifications (Package (PackageAnnot (PkgsYaml pyfp:hsfs)) path) = do
+getPkgsModifications (Package path (PackageAnnot (PkgsYaml pyfp:hsfs))) = do
     let packagesList = nub $ concatMap getPackageNames $
             map snd $ filter fst $
             map (faHasPackageImports &&& faImportsList) hsfs
-    return $ Package (PkgsFileMods pyfp packagesList) path
+    return $ Package path $ PkgsFileMods pyfp packagesList
 getPkgsModifications dir = return dir
 
 executePackageModification :: Bool -> WorkTree -> IO ()

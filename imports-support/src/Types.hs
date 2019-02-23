@@ -17,8 +17,8 @@ actionFromPrint :: Bool -> Action
 actionFromPrint True = PrintPlan
 actionFromPrint _    = Execute
 
-data WorkTree = Package Annotation FilePath
-              | Directory Annotation FilePath [WorkTree]
+data WorkTree = Package FilePath Annotation
+              | Directory FilePath Annotation [WorkTree]
             deriving (Show, Data, Typeable)
 
 data Annotation = PackageAnnot [FileAnnot]
