@@ -28,13 +28,13 @@ import                                Types
 --import Debug.Trace
 --lttrace a b = trace (a ++ ":" ++ show b) b
 
--- todo: print mode and execution mode
 -- todo: remove file print before modification, use conduit instead of io
 -- todo: deal with comments
 -- todo: deal with multilines
 -- todo: deal with qualified imports
 -- todo: imports formatter
 -- todo: importify file (add package imports and labels)
+-- todo: improve errors handling
 
 someFunc :: IO ()
 someFunc = execParser opts
@@ -67,22 +67,41 @@ someFunc = execParser opts
 
 
 runCmd :: SearchOpts -> IO ()
-runCmd (SearchOpts dir _actionToTake) = do
+runCmd (SearchOpts dir actionToTake) = do
     cwd <- getCurrentDirectory
     let path = cwd </> dir
     packages <- findPackagesRecursively path
-    packages' <- prepare packages
-    pPrint ("------------------------------" :: Text)
-    executePackageModification packages'
+    case actionToTake of
+        Execute -> do
+            packages' <- prepare packages
+            pPrint ("------------------------------" :: Text)
+            executePackageModification packages'
+        PrintPlan -> do
+            reports <- prepareReport packages
+            putStrLn "Printing Modifications Plan"
+            forM_ reports $ \(hdr,tree) -> do
+                putStrLn ("### " ++ hdr )
+                putStrLn ""
+                pPrint tree
+                putStrLn ""
+
+
+prepareReport :: WorkTree -> IO [(String,WorkTree)]
+prepareReport packages = foldM worker [("initial",packages)] $ wtTransforms
+    where
+        worker stgs (hdr,f) = do
+            let lastStage = snd $ last stgs
+            currentStage <- f lastStage
+            return $ stgs ++ [(hdr, currentStage)]
 
 prepare :: WorkTree -> IO WorkTree
 prepare packages =
-    foldrM ($) packages transforms
-         where
-            transforms :: [WorkTree -> IO WorkTree]
-            transforms = [ transformBiM getPkgsModifications
-                         , transformBiM annotatePackage
-                         ]
+    foldrM ($) packages $ map snd $ reverse wtTransforms
+
+wtTransforms :: [(String,WorkTree -> IO WorkTree)]
+wtTransforms = [ ("annotatePackage", transformBiM annotatePackage)
+               , ("getPkgsModifications", transformBiM getPkgsModifications)
+               ]
 
 findPackagesRecursively :: String -> IO WorkTree
 findPackagesRecursively dirpath = do

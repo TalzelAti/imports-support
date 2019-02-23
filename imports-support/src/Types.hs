@@ -6,14 +6,14 @@ module Types where
 import           "base"                Data.Typeable
 import           "base"                Data.Data
 
-data Action = PrintDir
-            | Modify
+data Action = PrintPlan
+            | Execute
 
 data SearchOpts = SearchOpts FilePath Action
 
 actionFromPrint :: Bool -> Action
-actionFromPrint True = PrintDir
-actionFromPrint _    = Modify
+actionFromPrint True = PrintPlan
+actionFromPrint _    = Execute
 
 data WorkTree = Package Annotation FilePath
               | Directory Annotation FilePath [WorkTree]
