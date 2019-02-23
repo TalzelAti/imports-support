@@ -5,6 +5,8 @@ module Types where
 
 import           "base"                Data.Typeable
 import           "base"                Data.Data
+import           "base"                Data.List
+import           "filepath"            System.FilePath
 
 data Action = PrintPlan
             | Execute
@@ -33,3 +35,19 @@ data FileAnnot =
         }
     | PkgsYaml String
     deriving (Show,Data,Typeable)
+
+prefixHeader :: String
+prefixHeader = "._IS_"
+
+addTempPrefix :: FilePath -> FilePath
+addTempPrefix fp
+    | prefixHeader `isPrefixOf` takeFileName fp = fp
+    | otherwise =
+        replaceFileName fp $ prefixHeader <> takeFileName fp
+
+
+removeTempPrefix :: FilePath -> FilePath
+removeTempPrefix fp
+    | prefixHeader `isPrefixOf` takeFileName fp =
+        replaceFileName fp $ drop (length prefixHeader) $ takeFileName fp
+    | otherwise = fp

@@ -23,7 +23,14 @@ import                                Types
 --import           "base"                Data.Monoid
 --import           "base"               System.IO
 --import           "extra"             Control.Monad.Extra
+import Control.Exception
+import System.IO.Error
 
+removeIfExists :: FilePath -> IO ()
+removeIfExists fileName = removeFile fileName `catch` handleExists
+    where handleExists e
+            | isDoesNotExistError e = return ()
+            | otherwise = throwIO e
 
 --import Debug.Trace
 --lttrace a b = trace (a ++ ":" ++ show b) b
@@ -183,8 +190,10 @@ executePackageModification wt = do
             worker (PkgsFileMods fp pkgs) = do
                 packageYamlContent <- readFile fp
                 let modifiedContent = modifyPackagesSection pkgs packageYamlContent
-                pPrint packageYamlContent
-                writeFile fp $ modifiedContent
+                    tempFile = addTempPrefix fp
+                writeFile tempFile $ modifiedContent
+                copyFile tempFile fp
+                removeIfExists tempFile
             worker _ = return ()
 
 modifyPackagesSection :: [String] -> String -> String
