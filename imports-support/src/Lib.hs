@@ -49,9 +49,9 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
 
 someFunc :: IO ()
 someFunc = do
-    fileContent <- readFile "/home/talz/development/imports-support/test.hs"
-    pPrint $ parseString "/home/talz/development/imports-support/test.hs" fileContent
-    --execParser opts >>= runCmd
+    -- fileContent <- readFile "/home/talz/development/imports-support/test.hs"
+    -- pPrint $ parseString "/home/talz/development/imports-support/test.hs" fileContent
+    execParser opts >>= runCmd
     where
         opts = info (options <**> helper)
             ( fullDesc
@@ -185,6 +185,10 @@ annotatePackage (Package packagePath _) = do
                 hsFileContent <- readFile hsFile
                 let importsList = findImportLines . lines $  hsFileContent -- optimize the readFile call
                     hasPackageImports = any isPackageImports . lines $ hsFileContent
+                putStrLn $ "###"
+                putStrLn $ unlines importsList
+                putStrLn $ "###"
+                putStrLn $ ""
                 return $ case parseString hsFile $ unlines importsList of
                     Left err -> Left $ ErrMsg err
                     Right stmts -> Right $ HsFileAnnot hsFile hasPackageImports stmts
