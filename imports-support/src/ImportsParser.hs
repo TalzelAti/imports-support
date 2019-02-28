@@ -59,7 +59,6 @@ statementP = P.choice
     , P.try importQualifiedOnlyAsP
     , importStmtP
     ]
-    --     <|>
 
 importStmtP :: P.Parser ImportStmt
 importStmtP = do
@@ -111,14 +110,19 @@ importQualifiedOnlyAsP = do
 mPkgImportPrsr :: P.Parser (Maybe String)
 mPkgImportPrsr = P.optionMaybe $ do
     P.char '"'
-    name <- identifier
+    name <- P.many1 (P.try idenWithDot P.<|> identifier)
     P.char '"'
-    return  name
+    return $ concat name
+    where
+        idenWithDot = do
+            iden <- identifier
+            dot <- P.char '-'
+            return $ iden ++ [dot]
 
 nameParser = P.sepBy1 identifier (P.char '.')
 
-parseString :: String -> [ImportStmt]
-parseString str =
-  case P.parse whileParser "" str of
-    Left e  -> error $ show e
-    Right r -> r
+parseString :: FilePath -> String -> Either String [ImportStmt]
+parseString fp str =
+  case P.parse whileParser fp str of
+    Left e  -> Left $ show e
+    Right rs -> Right rs

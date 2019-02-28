@@ -31,7 +31,7 @@ data FileAnnot =
     HsFileAnnot
         { faName :: FilePath
         , faHasPackageImports ::Bool
-        , faImportsList :: [String]
+        , faImportsList :: [ImportStmt]
         }
     | PkgsYaml String
     deriving (Show,Data,Typeable)
@@ -39,7 +39,7 @@ data FileAnnot =
 -- parser types
 
 data Qualified = QualDef | QualOnlyAs ModuleName | QualAs ModuleName
-    deriving (Show)
+    deriving (Show,Data,Typeable)
 
 type ModuleName = [String]
 data ImportStmt =
@@ -50,10 +50,10 @@ data ImportStmt =
         , _importStmtQualOnly_qualified :: Qualified
         }
 
-        deriving (Show)
+        deriving (Show,Data,Typeable)
 
 data ImportExtra = HidingList [String] | ImportList [String] | InstancesOnly
-    deriving (Show)
+    deriving (Show,Data,Typeable)
 
 -- utils
 

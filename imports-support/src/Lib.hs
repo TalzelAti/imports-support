@@ -11,6 +11,7 @@ module Lib
 import           "directory"           System.Directory
 import           "base"                Data.List
 import           "base"                Data.Maybe
+import           "base"                Data.Either
 import           "base"                Control.Monad
 import           "optparse-applicative"      Options.Applicative
 import           "pretty-simple"       Text.Pretty.Simple
@@ -48,14 +49,9 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
 
 someFunc :: IO ()
 someFunc = do
-    fileContent <- readFile "/home/talz/development/imports-support/test.hs"
-    putStrLn "########"
-    putStrLn fileContent
-    putStrLn "########"
-    putStrLn $ show fileContent
-    putStrLn "########"
-    pPrint $ parseString fileContent
-    -- execParser opts >>= runCmd
+    -- fileContent <- readFile "/home/talz/development/imports-support/test.hs"
+    -- pPrint $ parseString "/home/talz/development/imports-support/test.hs" fileContent
+    execParser opts >>= runCmd
     where
         opts = info (options <**> helper)
             ( fullDesc
@@ -174,20 +170,28 @@ annotatePackage (Package packagePath _) = do
     files <- listAllFiles packagePath
     let haskellFiles = filter (isSuffixOf ".hs") files
         mPackageYamlFile = listToMaybe $ filter isPackageYaml files
-    fsAnns <- forM haskellFiles $ \hsFile -> do
-        hsFileContent <- readFile hsFile
-        let importsList = findImportLines . lines $  hsFileContent -- optimize the readFile call
-            hasPackageImports = any isPackageImports . lines $ hsFileContent
-        pPrint hsFile
-        pPrint ">>>>>>>>>>>>>>>>>>>>>>>>>"
-        pPrint $ importsList
-        putStrLn $ head importsList
-        --pPrint $ parseString (head importsList)
-        pPrint "<<<<<<<<<<<<<<<<<<<<<<<<<"
-        return $ HsFileAnnot hsFile hasPackageImports importsList
-    let annot = case mPackageYamlFile of
-            Just f  -> PackageAnnot (PkgsYaml f:fsAnns)
-            Nothing -> ErrMsg $ "Error: No stack file in package: " ++ show packagePath
+    -- fsAnns <- forM haskellFiles $ \hsFile -> do
+        -- hsFileContent <- readFile hsFile
+        -- let importsList = findImportLines . lines $  hsFileContent -- optimize the readFile call
+            -- hasPackageImports = any isPackageImports . lines $ hsFileContent
+--
+        -- return $ case parseString $ unlines importsList of
+            -- Left err ->  err
+            -- Right stmts -> HsFileAnnot hsFile hasPackageImports stmts
+    annot <- case mPackageYamlFile of
+        Nothing -> return $ ErrMsg $ "Error: No stack file in package: " ++ show packagePath
+        Just f  -> do
+            fsAnns <- forM haskellFiles $ \hsFile -> do
+                hsFileContent <- readFile hsFile
+                let importsList = findImportLines . lines $  hsFileContent -- optimize the readFile call
+                    hasPackageImports = any isPackageImports . lines $ hsFileContent
+                return $ case parseString hsFile $ unlines importsList of
+                    Left err -> Left $ ErrMsg err
+                    Right stmts -> Right $ HsFileAnnot hsFile hasPackageImports stmts
+            return $ case partitionEithers fsAnns of
+                ([],fsAnns') -> PackageAnnot (PkgsYaml f:fsAnns')
+                (errs,_) -> head errs
+
     return $ Package packagePath annot
 
 getPkgsModifications :: WorkTree -> IO WorkTree
@@ -197,6 +201,9 @@ getPkgsModifications (Package path (PackageAnnot (PkgsYaml pyfp:hsfs))) = do
             map (faHasPackageImports &&& faImportsList) hsfs
     return $ Package path $ PkgsFileMods pyfp packagesList
 getPkgsModifications dir = return dir
+
+getPackageNames :: [ImportStmt] -> [String]
+getPackageNames = nub . removeBaseModule . catMaybes . map _importStmtQualOnly_pkgImport
 
 executePackageModification :: Bool -> WorkTree -> IO ()
 executePackageModification copyOnly wt =
@@ -251,8 +258,6 @@ findImportLines = takeWhile isImportClause . dropWhile (not . isImport)
           isImportClause x = isImport x || null x || isMultiLineImport x || isLineComment x
 
 
-getPackageNames :: [String] -> [String]
-getPackageNames = nub . removeBaseModule . map takePackageDeclrs . filter hasPackageDclr
 
 
 takePackageDeclrs :: String -> String
