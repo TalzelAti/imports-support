@@ -130,8 +130,20 @@ nameParser = sepBy1 identifier (char '.')
 
 importExtraParser :: Parser (Maybe ImportExtra)
 importExtraParser = optionMaybe $
-      choice [ try importListParser
+      choice [ try hidingListParser
+             , try importListParser
              , instancesOnlyParser ]
+
+hidingListParser :: Parser ImportExtra
+hidingListParser = do
+    reserved "hiding"
+    whiteSpace
+    char '('
+    importList <-
+        sepBy1 identifier comma
+    char ')'
+    whiteSpace
+    return $ HidingList importList
 
 importListParser :: Parser ImportExtra
 importListParser = do
