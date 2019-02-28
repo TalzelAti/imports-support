@@ -9,29 +9,29 @@ module ImportsParser
     ( parseString
     ) where
 
-import qualified "parsec" Text.ParserCombinators.Parsec as P
-import qualified "parsec" Text.Parsec.Combinator as P
+import  "parsec" Text.ParserCombinators.Parsec
+import  "parsec" Text.Parsec.Combinator
 
 
-import qualified "parsec" Text.ParserCombinators.Parsec.Expr as P
-import qualified "parsec" Text.ParserCombinators.Parsec.Language as P
+import  "parsec" Text.ParserCombinators.Parsec.Expr
+import  "parsec" Text.ParserCombinators.Parsec.Language
 import qualified  "parsec" Text.ParserCombinators.Parsec.Token as Token
 import                                Types
 
 
 languageDef =
-  P.emptyDef { Token.commentStart    = "{-"
-             , Token.commentEnd      = "-}"
-             , Token.commentLine     = "--"
-             , Token.identStart      = P.letter
-             , Token.identLetter     = P.alphaNum
-             , Token.reservedNames   = [ "import"
-                                       , "qualified"
-                                       , "as"
-                                       , "hiding"
-                                       ]
+  emptyDef { Token.commentStart    = "{-"
+           , Token.commentEnd      = "-}"
+           , Token.commentLine     = "--"
+           , Token.identStart      = letter
+           , Token.identLetter     = alphaNum
+           , Token.reservedNames   = [ "import"
+                                     , "qualified"
+                                     , "as"
+                                     , "hiding"
+                                     ]
 
-             }
+           }
 
 lexer = Token.makeTokenParser languageDef
 
@@ -47,33 +47,34 @@ commaSep = Token.commaSep    lexer
 commaSep1 = Token.commaSep1    lexer
 symbol = Token.symbol    lexer
 
-whileParser :: P.Parser [ImportStmt]
-whileParser = do --P.sepBy statementP (whiteSpace >> P.char '\n' >> return ())
-    stmts <- P.sepBy statementP whiteSpace
-    P.eof
+whileParser :: Parser [ImportStmt]
+whileParser = do --sepBy statementP (whiteSpace >> char '\n' >> return ())
+    stmts <- sepBy statementP whiteSpace
     return stmts
 
-statementP :: P.Parser ImportStmt
-statementP = P.choice
-    [ P.try importQualifiedAsP
-    , P.try importQualifiedOnlyAsP
+statementP :: Parser ImportStmt
+statementP = choice
+    [ try importQualifiedAsP
+    , try importQualifiedOnlyAsP
     , importStmtP
     ]
 
-importStmtP :: P.Parser ImportStmt
+importStmtP :: Parser ImportStmt
 importStmtP = do
     reserved "import"
     whiteSpace
     mPackageImport <- mPkgImportPrsr
     whiteSpace
     moduleName <- nameParser
+    whiteSpace
+    extras <- importExtraParser
     return $ ImportStmt
         mPackageImport
         moduleName
-        Nothing
+        extras
         QualDef
 
-importQualifiedAsP :: P.Parser ImportStmt
+importQualifiedAsP :: Parser ImportStmt
 importQualifiedAsP = do
     reserved "import"
     whiteSpace
@@ -83,13 +84,16 @@ importQualifiedAsP = do
     whiteSpace
     reserved "as"
     whiteSpace
-    ImportStmt
+    qualifiedName <- nameParser
+    whiteSpace
+    extras <- importExtraParser
+    return $ ImportStmt
         mPackageImport
         moduleName
-        Nothing
-        . QualAs <$> nameParser
+        extras
+        $ QualAs qualifiedName
 
-importQualifiedOnlyAsP :: P.Parser ImportStmt
+importQualifiedOnlyAsP :: Parser ImportStmt
 importQualifiedOnlyAsP = do
     reserved "import"
     whiteSpace
@@ -101,28 +105,54 @@ importQualifiedOnlyAsP = do
     whiteSpace
     reserved "as"
     whiteSpace
-    ImportStmt
+    qualifiedName <- nameParser
+    whiteSpace
+    extras <- importExtraParser
+    return $ ImportStmt
         mPackageImport
         moduleName
         Nothing
-        . QualOnlyAs <$> nameParser
+        $ QualOnlyAs qualifiedName
 
-mPkgImportPrsr :: P.Parser (Maybe String)
-mPkgImportPrsr = P.optionMaybe $ do
-    P.char '"'
-    name <- P.many1 (P.try idenWithDot P.<|> identifier)
-    P.char '"'
+mPkgImportPrsr :: Parser (Maybe String)
+mPkgImportPrsr = optionMaybe $ do
+    char '"'
+    name <- many1 (try idenWithDot <|> identifier)
+    char '"'
     return $ concat name
     where
         idenWithDot = do
             iden <- identifier
-            dot <- P.char '-'
+            dot <- char '-'
             return $ iden ++ [dot]
 
-nameParser = P.sepBy1 identifier (P.char '.')
+nameParser = sepBy1 identifier (char '.')
+
+importExtraParser :: Parser (Maybe ImportExtra)
+importExtraParser = optionMaybe $
+      choice [ try importListParser
+             , instancesOnlyParser ]
+
+importListParser :: Parser ImportExtra
+importListParser = do
+    char '('
+    importList <-
+        sepBy1 identifier comma
+    char ')'
+    whiteSpace
+    return $ ImportList importList
+
+
+instancesOnlyParser :: Parser ImportExtra
+instancesOnlyParser = do
+    char '('
+    whiteSpace
+    char ')'
+    whiteSpace
+    return InstancesOnly
 
 parseString :: FilePath -> String -> Either String [ImportStmt]
 parseString fp str =
-  case P.parse whileParser fp str of
+  case parse whileParser fp str of
     Left e  -> Left $ show e
     Right rs -> Right rs

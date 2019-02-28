@@ -49,9 +49,9 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
 
 someFunc :: IO ()
 someFunc = do
-    -- fileContent <- readFile "/home/talz/development/imports-support/test.hs"
-    -- pPrint $ parseString "/home/talz/development/imports-support/test.hs" fileContent
-    execParser opts >>= runCmd
+    fileContent <- readFile "/home/talz/development/imports-support/test.hs"
+    pPrint $ parseString "/home/talz/development/imports-support/test.hs" fileContent
+    --execParser opts >>= runCmd
     where
         opts = info (options <**> helper)
             ( fullDesc
