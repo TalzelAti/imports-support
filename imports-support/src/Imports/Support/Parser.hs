@@ -5,7 +5,7 @@
 
 
 
-module ImportsParser
+module Imports.Support.Parser
     ( parseString
     ) where
 
@@ -16,7 +16,8 @@ import  "parsec" Text.Parsec.Combinator
 import  "parsec" Text.ParserCombinators.Parsec.Expr
 import  "parsec" Text.ParserCombinators.Parsec.Language
 import qualified  "parsec" Text.ParserCombinators.Parsec.Token as Token
-import                                Types
+import                                          Imports.Support.Parser.Types
+
 
 
 languageDef =

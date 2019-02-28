@@ -20,7 +20,8 @@ import           "base"               Control.Arrow
 import           "text"                     Data.Text (Text)
 import           "filepath"            System.FilePath
 import                                Types
-import                                ImportsParser
+import                                Imports.Support.Parser
+import                                Imports.Support.Parser.Types
 
 import Control.Exception
 import Debug.Trace
@@ -84,7 +85,7 @@ runCmd (SearchOpts dir actionToTake) = do
             executePackageModification False packages'
         PrintPlan -> do
             reports <- prepareReport packages
-            putStrLn "Printing Modifications Plan"
+            putStrLn "Printing Report"
             forM_ reports $ \(hdr,tree) -> do
                 putStrLn ("### " ++ hdr )
                 putStrLn ""
@@ -171,10 +172,6 @@ annotatePackage (Package packagePath _) = do
                 hsFileContent <- readFile hsFile
                 let importsList = findImportLines . lines $  hsFileContent -- optimize the readFile call
                     hasPackageImports = any isPackageImports . lines $ hsFileContent
-                putStrLn $ "###"
-                putStrLn $ unlines importsList
-                putStrLn $ "###"
-                putStrLn $ ""
                 return $ case parseString hsFile $ unlines importsList of
                     Left err -> Left $ ErrMsg err
                     Right stmts -> Right $ HsFileAnnot hsFile hasPackageImports stmts
@@ -196,8 +193,7 @@ getPackageNames :: [ImportStmt] -> [String]
 getPackageNames = nub . removeBaseModule . catMaybes . map _importStmtQualOnly_pkgImport
 
 executePackageModification :: Bool -> WorkTree -> IO ()
-executePackageModification copyOnly wt =
-    mapM_ worker $ mods
+executePackageModification copyOnly wt = mapM_ worker $ mods
         where
             mods = universeBi wt
             worker (ErrMsg err) = pPrint err
@@ -208,8 +204,10 @@ executePackageModification copyOnly wt =
                 removeIfExists tempFile
                 writeFile tempFile $ modifiedContent
                 if copyOnly
-                    then
-                        pPrint mods
+                    then do
+                        return ()
+                        -- putStrLn "Printing Modifications Plan:\n"
+                        -- pPrint mods
                     else do
                         copyFile tempFile fp
                         removeIfExists tempFile

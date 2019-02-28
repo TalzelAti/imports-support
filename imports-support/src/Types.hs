@@ -7,6 +7,7 @@ import                                Data.Typeable
 import           "base"                Data.Data
 import           "base"                Data.List
 import           "filepath"            System.FilePath
+import                                Imports.Support.Parser.Types
 
 data Action = PrintPlan
             | Execute
@@ -38,22 +39,7 @@ data FileAnnot =
 
 -- parser types
 
-data Qualified = QualDef | QualOnlyAs ModuleName | QualAs ModuleName
-    deriving (Show,Data,Typeable)
 
-type ModuleName = [String]
-data ImportStmt =
-    ImportStmt
-        { _importStmtQualOnly_pkgImport  :: Maybe String
-        , _importStmtQualOnly_moduleName :: ModuleName
-        , _importStmtQualOnly_importExtra :: Maybe ImportExtra
-        , _importStmtQualOnly_qualified :: Qualified
-        }
-
-        deriving (Show,Data,Typeable)
-
-data ImportExtra = HidingList [String] | ImportList [String] | InstancesOnly
-    deriving (Show,Data,Typeable)
 
 -- utils
 
