@@ -3,7 +3,7 @@
 
 module Types where
 
-import           "base"                Data.Typeable
+import                                Data.Typeable
 import           "base"                Data.Data
 import           "base"                Data.List
 import           "filepath"            System.FilePath
@@ -35,6 +35,27 @@ data FileAnnot =
         }
     | PkgsYaml String
     deriving (Show,Data,Typeable)
+
+-- parser types
+
+data Qualified = QualDef | QualOnlyAs ModuleName | QualAs ModuleName
+    deriving (Show)
+
+type ModuleName = [String]
+data ImportStmt =
+    ImportStmt
+        { _importStmtQualOnly_pkgImport  :: Maybe String
+        , _importStmtQualOnly_moduleName :: ModuleName
+        , _importStmtQualOnly_importExtra :: Maybe ImportExtra
+        , _importStmtQualOnly_qualified :: Qualified
+        }
+
+        deriving (Show)
+
+data ImportExtra = HidingList [String] | ImportList [String] | InstancesOnly
+    deriving (Show)
+
+-- utils
 
 prefixHeader :: String
 prefixHeader = "_IS_tmp_file_"

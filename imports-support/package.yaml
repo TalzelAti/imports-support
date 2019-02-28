@@ -28,12 +28,13 @@ dependencies:
 - pretty-simple
 - text
 - uniplate
+- parsec
 
 library:
   source-dirs: src
-  ghc-options:
-    - -Wall
-    - -Werror
+  #ghc-options:
+    #- -Wall
+    #- -Werror
 
 executables:
   imports-support-exe:

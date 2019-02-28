@@ -20,187 +20,17 @@ import           "base"               Control.Arrow
 import           "text"                     Data.Text (Text)
 import           "filepath"            System.FilePath
 import                                Types
+import                                ImportsParser
 --import           "base"                Data.Monoid
 --impodrt           "base"               System.IO
 --import           "extra"             Control.Monad.Extra
 import Control.Exception
 import Debug.Trace
 import System.IO.Error
-import qualified "parsec" Text.ParserCombinators.Parsec as P
-import qualified "parsec" Text.Parsec.Combinator as P
 
-
-import qualified "parsec" Text.ParserCombinators.Parsec.Expr as P
-import qualified "parsec" Text.ParserCombinators.Parsec.Language as P
-import qualified  "parsec" Text.ParserCombinators.Parsec.Token as Token
-
-data Qualified = QualDef | QualOnly  | QualAs ModuleName
-    deriving (Show)
-type ModuleName = [String]
-data ImportStmt =
-    ImportStmt
-        { _importStmtQualOnly_pkgImport  :: Maybe String
-        , _importStmtQualOnly_moduleName :: ModuleName
-        , _importStmtQualOnly_importExtra :: Maybe ImportExtra
-        , _importStmtQualOnly_qualified :: Qualified
-        }
-
-        deriving (Show)
-
-data ImportExtra = HidingList [String] | ImportList [String] | InstancesOnly
-    deriving (Show)
-
-languageDef =
-  P.emptyDef { Token.commentStart    = "{-"
-             , Token.commentEnd      = "-}"
-             , Token.commentLine     = "--"
-             , Token.identStart      = P.letter
-             , Token.identLetter     = P.alphaNum
-             , Token.reservedNames   = [ "import"
-                                       , "qualified"
-                                       , "as"
-                                       , "hiding"
-                                       ]
-
-             }
-
-lexer = Token.makeTokenParser languageDef
-
-identifier = Token.identifier lexer -- parses an identifier
-reserved   = Token.reserved   lexer -- parses a reserved name
-parens     = Token.parens     lexer -- parses surrounding parenthesis:
-                                    --   parens p
-                                    -- takes care of the parenthesis and
-                                    -- uses p to parse what's inside them
-comma      = Token.comma     lexer -- parses a semicolon
-whiteSpace = Token.whiteSpace lexer -- parses whitespace
-commaSep = Token.commaSep    lexer
-commaSep1 = Token.commaSep1    lexer
-symbol = Token.symbol    lexer
-
-whileParser :: P.Parser [ImportStmt]
-whileParser = do --P.sepBy statementP (whiteSpace >> P.char '\n' >> return ())
-    many statementP
-    where
-
-statementP :: P.Parser ImportStmt
-statementP = importStmtP
-        -- <|> importQualifiedOnlyP
-
-importStmtP :: P.Parser ImportStmt
-importStmtP = do
-    reserved "import"
-    whiteSpace
-    mPackageImport <- mPkgImportPrsr
-    whiteSpace
-    moduleName <- nameParser
-    whiteSpace
-    return $ ImportStmt
-        mPackageImport
-        moduleName
-        Nothing
-        QualDef
-
-mPkgImportPrsr :: P.Parser (Maybe String)
-mPkgImportPrsr = P.optionMaybe $ do
-    P.char '"'
-    name <- identifier
-    P.char '"'
-    return  name
-
-nameParser = P.sepBy1 identifier (P.char '.')
-
-        -- mAsPrsr = do
-        --     reserved "as"
-        --     QualAs <$> identifier
-        -- mImportListParser =
-        --     importsListParser <|> hidingListParser
-        -- importsListParser = do
-        --     idens  <- parens $ commaSep identifier
-        --     return $ if null idens
-        --              then InstancesOnly
-        --              else ImportList idens
-        -- hidingListParser = do
-        --     reserved "hiding"
-        --     idens  <- parens $ commaSep1 identifier
-        --     return $ if null idens
-        --              then InstancesOnly
-        --              else ImportList idens
-
-importQualifiedOnlyP :: P.Parser ImportStmt
-importQualifiedOnlyP = do undefined
-    -- reserved "import"
-    -- mQualified <- qualifiedTokenParser
-    -- whiteSpace
-    -- mPackageImport <- mPkgImportPrsr
-    -- moduleName <- nameParser
-    -- mAs <- mAsPrsr
-    --mImportList <- mImportListParser
-    -- let qual = f mPackageImport mAs
-    -- return $ lttrace "importStmt" $ ImportStmt
-    --     qual
-    --     mPackageImport
-    --     moduleName
-    --     Nothing
-    where
-        -- qualifiedTokenParser :: P.Parser Qualified
-        -- qualifiedTokenParser =
-        --     (reserved "qualified" >> whiteSpace >> return (QualOnly []))
-        --     <|> (whiteSpace >> return (QualAs []))
-        -- mPkgImportPrsr :: P.Parser (Maybe String)
-        -- mPkgImportPrsr = P.optionMaybe mPkgImportPrsr'
-        -- mPkgImportPrsr' = do
-        --     P.char '"'
-        --     name <- identifier
-        --     P.char '"'
-        --     return $ lttrace "just name" name
-
-        -- nameParser = do
-        --     whiteSpace
-        --     P.sepBy1 identifier (P.char '.')
-        -- mAsPrsr = do
-        --     reserved "as"
-        --     QualAs <$> identifier
-        -- mImportListParser =
-        --     importsListParser <|> hidingListParser
-        -- importsListParser = do
-        --     idens  <- parens $ commaSep identifier
-        --     return $ if null idens
-        --              then InstancesOnly
-        --              else ImportList idens
-        -- hidingListParser = do
-        --     reserved "hiding"
-        --     idens  <- parens $ commaSep1 identifier
-        --     return $ if null idens
-        --              then InstancesOnly
-        --              else ImportList idens
-
-parseString :: String -> [ImportStmt]
-parseString str =
-  case P.parse whileParser "" str of
-    Left e  -> error $ show e
-    Right r -> r
-
-
-
--- bExpression :: Parser BExpr
--- bExpression = buildExpressionParser bOperators bTerm
-
-
--- bOperators = [ [Prefix (reserved "not" >> return (Not             ))          ]
---              , [Infix  (reservedOp "and" >> return (BBinary And     )) AssocLeft,
---                 Infix  (reservedOp "or"  >> return (BBinary Or      )) AssocLeft]
---              ]
-
-
-
--- bTerm =  parens bExpression
---      <|> (reserved "true"  >> return (BoolConst True ))
---      <|> (reserved "false" >> return (BoolConst False))
---      <|> rExpression
 
 --import Debug.Trace
-lttrace a b = trace (a ++ ":" ++ show b) b
+--lttrace a b = trace (a ++ ":" ++ show b) b
 
 -- todo: deal with comments
 -- todo: deal with multilines
@@ -352,7 +182,7 @@ annotatePackage (Package packagePath _) = do
         pPrint ">>>>>>>>>>>>>>>>>>>>>>>>>"
         pPrint $ importsList
         putStrLn $ head importsList
-        pPrint $ parseString (head importsList)
+        --pPrint $ parseString (head importsList)
         pPrint "<<<<<<<<<<<<<<<<<<<<<<<<<"
         return $ HsFileAnnot hsFile hasPackageImports importsList
     let annot = case mPackageYamlFile of
