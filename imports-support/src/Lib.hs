@@ -16,15 +16,12 @@ import           "base"                Control.Monad
 import           "optparse-applicative"      Options.Applicative
 import           "pretty-simple"       Text.Pretty.Simple
 import           "uniplate"         Data.Generics.Uniplate.Data
---import           "base"               Data.Foldable
 import           "base"               Control.Arrow
 import           "text"                     Data.Text (Text)
 import           "filepath"            System.FilePath
 import                                Types
 import                                ImportsParser
---import           "base"                Data.Monoid
---impodrt           "base"               System.IO
---import           "extra"             Control.Monad.Extra
+
 import Control.Exception
 import Debug.Trace
 import System.IO.Error
@@ -33,13 +30,10 @@ import System.IO.Error
 --import Debug.Trace
 --lttrace a b = trace (a ++ ":" ++ show b) b
 
--- todo: deal with comments
--- todo: deal with multilines
--- todo: deal with qualified imports
 -- todo: add option to remove redundant files from package.yml
 -- todo: imports formatter
 -- todo: importify file (add package imports and labels)
--- todo: unique temp names
+-- todo: write tests
 
 removeIfExists :: FilePath -> IO ()
 removeIfExists fileName = removeFile fileName `catch` handleExists
@@ -170,14 +164,6 @@ annotatePackage (Package packagePath _) = do
     files <- listAllFiles packagePath
     let haskellFiles = filter (isSuffixOf ".hs") files
         mPackageYamlFile = listToMaybe $ filter isPackageYaml files
-    -- fsAnns <- forM haskellFiles $ \hsFile -> do
-        -- hsFileContent <- readFile hsFile
-        -- let importsList = findImportLines . lines $  hsFileContent -- optimize the readFile call
-            -- hasPackageImports = any isPackageImports . lines $ hsFileContent
---
-        -- return $ case parseString $ unlines importsList of
-            -- Left err ->  err
-            -- Right stmts -> HsFileAnnot hsFile hasPackageImports stmts
     annot <- case mPackageYamlFile of
         Nothing -> return $ ErrMsg $ "Error: No stack file in package: " ++ show packagePath
         Just f  -> do
