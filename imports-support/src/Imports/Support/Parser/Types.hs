@@ -6,7 +6,9 @@ module Imports.Support.Parser.Types where
 import                                Data.Typeable
 import           "base"                Data.Data
 
-data Qualified = QualDef | QualOnlyAs ModuleName | QualAs ModuleName
+data Qualified = QualDef
+               | QualOnlyAs ModuleName
+               | QualAs ModuleName
     deriving (Show,Data,Typeable)
 
 type ModuleName = [String]

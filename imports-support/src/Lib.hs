@@ -266,12 +266,13 @@ formatImports stmts =
     let details = lttrace "details" $ importCharLengthInfo stmts
     in concatMap (formatImport details) stmts
 
-formatImport :: (Bool,Int,Int,Bool,Int) -> ImportStmt -> [String]
+formatImport :: (Bool,Int,Int,Bool,Int,Bool) -> ImportStmt -> [String]
 formatImport ( anyHasQualifiedOnly
              , longestPackageImportName
              , longestName
              , anyHasQualifiedAs
              , longestAlias
+             , hasHiding
              )
              (ImportStmt
                  pkgname
@@ -279,18 +280,21 @@ formatImport ( anyHasQualifiedOnly
                  extras
                  qual
              ) =
-             [unwords $ [ "import" ]
-                     ++ resolveQualify qual
-                     ++ [ resolvePkgImport pkgname
-                        , (concatModuleName moduleName :: String)
-                        ] ++ resolveAs qual
-             ]
+    let (importExtraHdr,importExtra) = maybe ([],[]) resolveExtra extras
+    in [unwords $ [ "import" ]
+               ++ resolveQualify qual
+               ++ [ resolvePkgImport pkgname
+                  , (concatModuleName moduleName :: String)
+                  ]
+               ++ resolveAs qual
+               ++ importExtraHdr
+       ] ++ importExtra
     where
         padSpaces n = replicate n ' '
         concatModuleName = intercalate "."
         emptyQualified =
             if anyHasQualifiedOnly
-                then [replicate 9 ' ']
+                then [padSpaces 9]
                 else []
         resolveQualify :: Qualified -> [String]
         resolveQualify QualDef = emptyQualified
@@ -300,33 +304,55 @@ formatImport ( anyHasQualifiedOnly
         resolvePkgImport (Just nm) = "\""<> nm <> "\"" <> padSpaces (longestPackageImportName - length nm)
         resolvePkgImport Nothing = replicate (longestPackageImportName + 2) ' '
         resolveAs :: Qualified -> [String]
-        resolveAs QualDef = [] -- if anyHasQualifiedOnly || anyHasQualifiedAs
-                                --  then [padSpaces $ 3 + longestAlias]
-                                --  else []
+        resolveAs QualDef = []
         resolveAs (QualOnlyAs nm) = resolveAs' nm
         resolveAs (QualAs nm) = resolveAs' nm
         resolveAs' nm =  [padSpaces $ longestName - moduleNameLength moduleName ,"as", intercalate "." nm] --, padSpaces (longestAlias - length nm)]
+        emptyExtra = if hasHiding
+                     then [padSpaces 6]
+                     else []
+        resolveExtra InstancesOnly = resolveExtra' emptyExtra []
+        resolveExtra (ImportList imlist) = resolveExtra' emptyExtra imlist
+        resolveExtra (HidingList imlist) = resolveExtra' ["hiding"] imlist
+        resolveExtra' hdr l
+            | length l <= 2 = ( hdr <> [formatImportFuncsOneLiner l]
+                              , []
+                              )
+            | otherwise = (hdr,formatImportFuncs l)
+        formatImportFuncs (x:xs) = [tab <> "( " <> x]
+                         ++ map (\x' -> tab <> ", " <> x' ) xs
+                         ++ [tab <> ")"]
+        tab = padSpaces 4
+        formatImportFuncsOneLiner [] = "()"
+        formatImportFuncsOneLiner (x:xs) = "(" <> x
+                         <> concatMap (\x' -> ", " <> x' ) xs
+                         <> ")"
+
 moduleNameLength = length . intercalate "."
 
-importCharLengthInfo :: [ImportStmt] -> (Bool,Int,Int,Bool,Int)
+importCharLengthInfo :: [ImportStmt] -> (Bool,Int,Int,Bool,Int, Bool)
 importCharLengthInfo stmts =
     let hasQualifiedOnly = any (isQualifiedOnlyAs. _importStmtQualOnly_qualified) stmts
         hasQualifiedAs =  any (isQualifiedAs . _importStmtQualOnly_qualified) stmts
         longestPackageImportName = maximum $ map length $ catMaybes $ map _importStmtQualOnly_pkgImport stmts
         longestName = maximum $ (++ [0]) $ map (moduleNameLength . _importStmtQualOnly_moduleName) stmts
         longestAlias = maximum $ (++ [0]) $ map moduleNameLength $ catMaybes $ map (getAliasName . _importStmtQualOnly_qualified) stmts
+        hasHiding = any isHiding . catMaybes . map _importStmtQualOnly_importExtra $ stmts
     in ( hasQualifiedOnly
        , longestPackageImportName
        , longestName
        , hasQualifiedAs
        , longestAlias
+       , hasHiding
        )
     where
         getAliasName :: Qualified -> Maybe ModuleName
         getAliasName QualDef = Nothing
         getAliasName (QualOnlyAs nm) = Just nm
         getAliasName (QualAs nm) = Just nm
-
+        isHiding :: ImportExtra -> Bool
+        isHiding HidingList{} = True
+        isHiding _ = False
         isQualifiedOnlyAs :: Qualified -> Bool
         isQualifiedOnlyAs QualDef = False
         isQualifiedOnlyAs QualOnlyAs{} = True
