@@ -90,7 +90,7 @@ importCharLengthInfo :: [ImportStmt] -> (Bool,Int,Int,Bool,Int, Bool)
 importCharLengthInfo stmts =
     let hasQualifiedOnly = any (isQualifiedOnlyAs. _importStmtQualOnly_qualified) stmts
         hasQualifiedAs =  any (isQualifiedAs . _importStmtQualOnly_qualified) stmts
-        longestPackageImportName = maximum $ map length $ catMaybes $ map _importStmtQualOnly_pkgImport stmts
+        longestPackageImportName = maximum $ (++ [0]) $ map length $ catMaybes $ map _importStmtQualOnly_pkgImport stmts
         longestName = maximum $ (++ [0]) $ map (moduleNameLength . _importStmtQualOnly_moduleName) stmts
         longestAlias = maximum $ (++ [0]) $ map moduleNameLength $ catMaybes $ map (getAliasName . _importStmtQualOnly_qualified) stmts
         hasHiding = any isHiding . catMaybes . map _importStmtQualOnly_importExtra $ stmts

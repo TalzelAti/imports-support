@@ -115,7 +115,7 @@ prepare packages = snd . last <$> prepareReport packages
 
 wtTransforms :: [(String,WorkTree -> IO WorkTree)]
 wtTransforms = [ ("annotatePackage", transformBiM annotatePackage)
-               , ("addPkgUpdate", transformBiM addPkgUpdate)
+               , ("addPkgUpdate", return . transformBi addPkgUpdate)
                , ("formatHsFilesImports", return . transformBi formatHsFilesImports)
                ]
 
@@ -186,13 +186,13 @@ annotatePackage (Package packagePath _) = do
 
     return $ Package packagePath annot
 
-addPkgUpdate :: WorkTree -> IO WorkTree
-addPkgUpdate (Package path (PackageAnnot annons@(PkgsYaml pyfp:hsfs) [])) = do
+addPkgUpdate :: WorkTree -> WorkTree
+addPkgUpdate (Package path (PackageAnnot annons@(PkgsYaml pyfp:hsfs) [])) =
     let packagesList = nub $ concatMap getPackageNames $
             map snd $ filter fst $
             map (faHasPackageImports &&& faImportsList) hsfs
-    return $ Package path $ PackageAnnot annons [PkgsFileUpdate pyfp packagesList]
-addPkgUpdate dir = return dir
+    in Package path $ PackageAnnot annons [PkgsFileUpdate pyfp packagesList]
+addPkgUpdate dir = dir
 
 getPackageNames :: [ImportStmt] -> [String]
 getPackageNames = nub . removeBaseModule . catMaybes . map _importStmtQualOnly_pkgImport
