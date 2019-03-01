@@ -24,12 +24,12 @@ import                                Imports.Support.Parser
 import                                Imports.Support.Parser.Types
 
 import Control.Exception
-import Debug.Trace
+--import Debug.Trace
 import System.IO.Error
 
 
---import Debug.Trace
---lttrace a b = trace (a ++ ":" ++ show b) b
+import Debug.Trace
+lttrace a b = trace (a ++ ":" ++ show b) b
 
 -- todo: add option to remove redundant files from package.yml
 -- todo: imports formatter
@@ -44,9 +44,11 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
 
 someFunc :: IO ()
 someFunc = do
-    -- fileContent <- readFile "/home/talz/development/imports-support/test.hs"
-    -- pPrint $ parseString "/home/talz/development/imports-support/test.hs" fileContent
-    execParser opts >>= runCmd
+    fileContent <- readFile "/home/talz/development/imports-support/test.hs"
+    let res = either error id $ parseString "/home/talz/development/imports-support/test.hs" fileContent
+    pPrint res
+    pPrint $ formatImports res
+    --execParser opts >>= runCmd
     where
         opts = info (options <**> helper)
             ( fullDesc
@@ -206,8 +208,6 @@ executePackageModification copyOnly wt = mapM_ worker $ mods
                 if copyOnly
                     then do
                         return ()
-                        -- putStrLn "Printing Modifications Plan:\n"
-                        -- pPrint mods
                     else do
                         copyFile tempFile fp
                         removeIfExists tempFile
@@ -248,11 +248,6 @@ findImportLines = takeWhile isImportClause . dropWhile (not . isImport)
 
 
 
-takePackageDeclrs :: String -> String
-takePackageDeclrs = filter ('"' /=) . head . tail . words
-
-hasPackageDclr :: String -> Bool
-hasPackageDclr = any ('"' ==)
 
 removeBaseModule :: [String] -> [String]
 removeBaseModule = filter ("base" /=)
@@ -265,3 +260,77 @@ listAllFiles dirpath = do
     let folders' = filter (not . isHiddenFolder) folders
     subfiles <- mapM listAllFiles folders'
     return $ reverse $ actualFiles ++ concat subfiles
+
+formatImports :: [ImportStmt] -> [String]
+formatImports stmts =
+    let details = lttrace "details" $ importCharLengthInfo stmts
+    in concatMap (formatImport details) stmts
+
+formatImport :: (Bool,Int,Int,Bool,Int) -> ImportStmt -> [String]
+formatImport ( anyHasQualifiedOnly
+             , longestPackageImportName
+             , longestName
+             , anyHasQualifiedAs
+             , longestAlias
+             )
+             (ImportStmt
+                 pkgname
+                 moduleName
+                 extras
+                 qual
+             ) =
+             [unwords $ [ "import" ]
+                     ++ resolveQualify qual
+                     ++ [ resolvePkgImport pkgname
+                        , (concatModuleName moduleName :: String)
+                        ] -- ++ resolveAs qual
+             ]
+    where
+        padSpaces n = replicate n ' '
+        concatModuleName = intercalate "."
+        emptyQualified =
+            if anyHasQualifiedOnly
+                then [replicate 9 ' ']
+                else []
+        resolveQualify :: Qualified -> [String]
+        resolveQualify QualDef = emptyQualified
+        resolveQualify QualOnlyAs{} = ["qualified"]
+        resolveQualify QualAs{} = emptyQualified
+        resolvePkgImport :: Maybe String -> String
+        resolvePkgImport (Just nm) = "\""<> nm <> "\"" <> padSpaces (longestPackageImportName - length nm)
+        resolvePkgImport Nothing = replicate (longestPackageImportName + 2) ' '
+        resolveAs :: Qualified -> [String]
+        resolveAs QualDef = if anyHasQualifiedOnly || anyHasQualifiedAs
+                                 then [padSpaces $ 3 + longestAlias]
+                                 else []
+        resolveAs (QualOnlyAs nm) = ["as", intercalate "." nm,padSpaces (longestAlias - length nm)]
+        resolveAs (QualAs nm) = ["as", intercalate "." nm, padSpaces (longestAlias - length nm)]
+
+importCharLengthInfo :: [ImportStmt] -> (Bool,Int,Int,Bool,Int)
+importCharLengthInfo stmts =
+    let hasQualifiedOnly = any (isQualifiedOnlyAs. _importStmtQualOnly_qualified) stmts
+        hasQualifiedAs =  any (isQualifiedAs . _importStmtQualOnly_qualified) stmts
+        longestPackageImportName = maximum $ map length $ catMaybes $ map _importStmtQualOnly_pkgImport stmts
+        longestName = maximum $ (++ [0]) $ map (length . intersperse "." . _importStmtQualOnly_moduleName) stmts
+        longestAlias = maximum $ (++ [0]) $ map (length . intersperse ".") $ catMaybes $ map (getAliasName . _importStmtQualOnly_qualified) stmts
+    in ( hasQualifiedOnly
+       , longestPackageImportName
+       , longestName
+       , hasQualifiedAs
+       , longestAlias
+       )
+    where
+        getAliasName :: Qualified -> Maybe ModuleName
+        getAliasName QualDef = Nothing
+        getAliasName (QualOnlyAs nm) = Just nm
+        getAliasName (QualAs nm) = Just nm
+
+        isQualifiedOnlyAs :: Qualified -> Bool
+        isQualifiedOnlyAs QualDef = False
+        isQualifiedOnlyAs QualOnlyAs{} = True
+        isQualifiedOnlyAs QualAs{} = False
+
+        isQualifiedAs :: Qualified -> Bool
+        isQualifiedAs QualDef = False
+        isQualifiedAs QualOnlyAs{} = False
+        isQualifiedAs QualAs{} = True
