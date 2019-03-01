@@ -33,12 +33,14 @@ import Debug.Trace
 lttrace a b = trace (a ++ ":" ++ show b) b
 
 -- better control flags
--- todo: add option to remove redundant files from package.yml
+-- todo: add option to annotate remove redundant files from package.yml
+-- todo: add option to read errors from the compiler, and run only when there are import errors
+-- todo: execute must be explicit, only --execute
+-- todo add option to modify haskell files
 -- todo: importify file (add package imports and labels)
 -- todo: unimportify
 -- todo: write tests for parser
 -- todo: write tests for formatter
--- todo: add option to read errors from the compiler, and run only when there are import errors
 
 removeIfExists :: FilePath -> IO ()
 removeIfExists fileName = removeFile fileName `catch` handleExists
