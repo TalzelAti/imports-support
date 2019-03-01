@@ -280,13 +280,16 @@ formatImport ( anyHasQualifiedOnly
                  extras
                  qual
              ) =
-    let (importExtraHdr,importExtra) = maybe ([],[]) (resolveExtra (padSpaces $ length mainClause + 2)) extras
-        mainClause = unwords $ [ "import" ]
+    let mainClause = unwords $ [ "import" ]
                             ++ resolveQualify qual
                             ++ [ resolvePkgImport pkgname
                                , (concatModuleName moduleName :: String)
                                ]
                            ++ resolveAs qual
+        (importExtraHdr,importExtra) = maybe ([],[])
+                                             (resolveExtra $ padSpaces mainClauseLength)
+                                             extras
+        mainClauseLength = length mainClause + 2  + length (concat emptyExtra)
     in [ unwords [mainClause, unwords importExtraHdr]
        ] ++ importExtra
     where
@@ -319,14 +322,12 @@ formatImport ( anyHasQualifiedOnly
                               , []
                               )
             | otherwise =
-                let tab' = tab <> padSpaces (length $ concat emptyExtra)
-                    (x,xs) = formatImportFuncs l tab'
+                let (x,xs) = formatImportFuncs l tab
                 in (hdr ++ x, xs)
         formatImportFuncs (x:xs) tab = ( ["( " <> x]
                                        , map (\x' -> tab <> ", " <> x' ) xs
                                          ++ [tab <> ")"]
                                        )
-        tab'' = padSpaces 14
         -- formatImportFuncsMultiLines (x:xs) = [tab <> "( " <> x]
         --                                   ++ map (\x' -> tab <> ", " <> x' ) xs
         --                                   ++ [tab <> ")"]
