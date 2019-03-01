@@ -9,23 +9,6 @@ import           "base"                Data.List
 import           "filepath"            System.FilePath
 import                                Imports.Support.Parser.Types
 
-data Action = PrintPlan
-            | Execute
-
-data Options = Options
-                 { _options_dir :: FilePath
-                 , _options_print :: Bool
-                 , _options_view :: Bool
-                 , _options_execute :: Bool
-                 }
-    | PrintOpt {_printOpt_dir :: FilePath}
-    | ViewOpt {_viewOpt_dir :: FilePath}
-    | ExecuteOpt {_executeOpt_dir :: FilePath}
-
-actionFromPrint :: Bool -> Action
-actionFromPrint True = PrintPlan
-actionFromPrint _    = Execute
-
 data WorkTree = Package FilePath Annotation
               | Directory FilePath Annotation [WorkTree]
             deriving (Show, Data, Typeable)

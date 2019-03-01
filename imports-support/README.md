@@ -17,6 +17,7 @@
 - todo add option to modify haskell files
 - make files explicitly packageImports
 - make files explicitly unPackageImports
+- deal with types imports (paren)
 
 
 

@@ -13,25 +13,25 @@ import           "base"                Data.List
 import           "base"                Data.Maybe
 import           "base"                Data.Either
 import           "base"                Control.Monad
-import           "optparse-applicative"      Options.Applicative
 import           "pretty-simple"       Text.Pretty.Simple
 import           "uniplate"         Data.Generics.Uniplate.Data
 import           "base"               Control.Arrow
 import           "text"                     Data.Text (Text)
 import           "filepath"            System.FilePath
 import                                Types
+import                                Imports.Support.CLI
 import                                Imports.Support.Parser
 import                                Imports.Support.Parser.Types
 import                                Imports.Support.Formatter
-import qualified "base"                      Data.Foldable as F
 
 import Control.Exception
 --import Debug.Trace
 import System.IO.Error
+import           "optparse-applicative"      Options.Applicative
 
 
-import Debug.Trace
-lttrace a b = trace (a ++ ":" ++ show b) b
+-- import Debug.Trace
+-- lttrace a b = trace (a ++ ":" ++ show b) b
 
 
 removeIfExists :: FilePath -> IO ()
@@ -46,93 +46,12 @@ someFunc = do
     -- let res = either error id $ parseString "/home/talz/development/imports-support/test.hs" fileContent
     -- pPrint res
     -- pPrint $ formatImports res
-    execParser opts >>= runCmd
+    execParser options >>= runCmd
     where
-        opts = info (optionsParser <**> helper)
-            ( fullDesc
-           <> progDesc "Run Import Support"
-            )
-        options :: Parser Options
-        options = Options
-            <$> packageOpt
-            <*> printOpt'
-            <*> viewOpt'
-            <*> executeOpt'
 
-        printOpt' :: Parser Bool
-        printOpt' = switch
-            ( long "print"
-           <> short 'p'
-           <> showDefault
-           <> help "prints execution plan for path"
-            )
-        viewOpt' :: Parser Bool
-        viewOpt' = switch
-            ( long "view"
-           <> short 'v'
-           <> showDefault
-           <> help ("generates tempFiles with prefix " ++ show prefixHeader ++ " in packages' dirs")
-            )
-        executeOpt' :: Parser Bool
-        executeOpt' = switch
-            ( long "execute"
-           <> showDefault
-           <> help "executes plan for path, use this option with Caution"
-            )
-
-packageOpt :: Parser FilePath
-packageOpt =
-   strOption
-    ( long "filepath"
-   <> short 'd'
-   <> showDefault
-   <> help "runs imports support on a package provided in path or directory"
-    )
-
-
-cmdWithHelp :: String
-            -> String
-            -> Parser a
-            -> Mod CommandFields a
-cmdWithHelp cmdName desc options =
-    command
-        cmdName $
-        info
-            (helper <*> options)
-            (fullDesc <> progDesc desc)
-
-subparsersWithHelp :: [(String,String, Parser a)] -> Parser a
-subparsersWithHelp = subparser . F.foldMap (\(x, y, z) -> cmdWithHelp x y z)
-
-optionsParser :: Parser Options
-optionsParser = subparsersWithHelp
-    [ ("print"   , "Prints execution plan for path"             , PrintOpt <$> packageOpt)
-    , ("view"    , "Generates tempFiles with prefix " ++ show prefixHeader ++ "in packages' dirs" , ViewOpt <$> packageOpt)
-    , ("execute" , "Executes plan for path, use this option with Caution", ExecuteOpt <$> packageOpt)
-    ]
 
 
 runCmd :: Options -> IO ()
-runCmd (Options dir actionToTake _ _) = do
-    cwd <- getCurrentDirectory
-    let path = cwd </> dir
-    packages <- findPackagesRecursively path
-    case actionToTake of
-        False -> do
-            packages' <- prepare packages
-            executePackageChanges False packages'
-        True -> do
-            reports <- prepareReport packages
-            putStrLn "Printing Report"
-            forM_ reports $ \(hdr,tree) -> do
-                putStrLn ("### " ++ hdr )
-                putStrLn ""
-                pPrint tree
-                putStrLn ""
-                pPrint ("############################" :: Text)
-                putStrLn ""
-                executePackageChanges True $ snd $ last reports
-
 runCmd (PrintOpt dir) =  do
     cwd <- getCurrentDirectory
     let path = cwd </> dir
@@ -152,7 +71,7 @@ runCmd (ViewOpt dir) =  do
     packages <- findPackagesRecursively path
     packages' <- prepare packages
 
-    executePackageChanges True packages
+    executePackageChanges True packages'
 
 runCmd (ExecuteOpt dir) =  do
     cwd <- getCurrentDirectory
@@ -279,7 +198,7 @@ executeFileUpdate copyOnly (PkgsFileUpdate fp pkgs) = do
         else do
             copyFile tempFile fp
             removeIfExists tempFile
-executeFileUpdate copyOnly _ = return ()
+executeFileUpdate _ _ = return ()
 
 modifyPackagesSection :: [String] -> String -> String
 modifyPackagesSection packages fileContent =
