@@ -23,7 +23,7 @@ data WorkTree = Package FilePath Annotation
             deriving (Show, Data, Typeable)
 
 data Annotation = PackageAnnot
-                    {_packageAnnot_filesAnnot :: [FileAnnot]
+                    { _packageAnnot_filesAnnot :: [FileAnnot]
                     , _packageAnnot_filesUpdate :: [FileUpdate]
                     }
                 | ErrMsg { _errMsg_errorMessage :: String }

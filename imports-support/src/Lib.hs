@@ -35,6 +35,7 @@ lttrace a b = trace (a ++ ":" ++ show b) b
 -- better control flags
 -- todo: add option to remove redundant files from package.yml
 -- todo: importify file (add package imports and labels)
+-- todo: unimportify
 -- todo: write tests for parser
 -- todo: write tests for formatter
 -- todo: add option to read errors from the compiler, and run only when there are import errors
@@ -114,7 +115,8 @@ prepare packages = snd . last <$> prepareReport packages
 
 wtTransforms :: [(String,WorkTree -> IO WorkTree)]
 wtTransforms = [ ("annotatePackage", transformBiM annotatePackage)
-               , ("getPkgsModifications", transformBiM getPkgsModifications)
+               , ("addPkgUpdate", transformBiM addPkgUpdate)
+               , ("formatHsFilesImports", return . transformBi formatHsFilesImports)
                ]
 
 findPackagesRecursively :: String -> IO WorkTree
@@ -184,13 +186,13 @@ annotatePackage (Package packagePath _) = do
 
     return $ Package packagePath annot
 
-getPkgsModifications :: WorkTree -> IO WorkTree
-getPkgsModifications (Package path (PackageAnnot annons@(PkgsYaml pyfp:hsfs) [])) = do
+addPkgUpdate :: WorkTree -> IO WorkTree
+addPkgUpdate (Package path (PackageAnnot annons@(PkgsYaml pyfp:hsfs) [])) = do
     let packagesList = nub $ concatMap getPackageNames $
             map snd $ filter fst $
             map (faHasPackageImports &&& faImportsList) hsfs
     return $ Package path $ PackageAnnot annons [PkgsFileUpdate pyfp packagesList]
-getPkgsModifications dir = return dir
+addPkgUpdate dir = return dir
 
 getPackageNames :: [ImportStmt] -> [String]
 getPackageNames = nub . removeBaseModule . catMaybes . map _importStmtQualOnly_pkgImport
@@ -216,6 +218,7 @@ executeFileUpdate copyOnly (PkgsFileUpdate fp pkgs) = do
         else do
             copyFile tempFile fp
             removeIfExists tempFile
+executeFileUpdate copyOnly _ = return ()
 
 modifyPackagesSection :: [String] -> String -> String
 modifyPackagesSection packages fileContent =
@@ -264,3 +267,15 @@ listAllFiles dirpath = do
     let folders' = filter (not . isHiddenFolder) folders
     subfiles <- mapM listAllFiles folders'
     return $ reverse $ actualFiles ++ concat subfiles
+
+formatHsFilesImports :: Annotation -> Annotation
+formatHsFilesImports (PackageAnnot filesAnnot filesUpdates) =
+    let moreFileUpdates = mapMaybe formatHsFile filesAnnot
+    in PackageAnnot filesAnnot $ filesUpdates <> moreFileUpdates
+    where
+        formatHsFile :: FileAnnot -> Maybe FileUpdate
+        formatHsFile (HsFileAnnot fp hasPI imports importStmts) =
+            let formattedImports = formatImports importStmts
+            in Just $ HsFileUpdate fp hasPI imports importStmts formattedImports
+        formatHsFile _ = Nothing
+formatHsFilesImports wt = wt
