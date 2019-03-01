@@ -280,14 +280,14 @@ formatImport ( anyHasQualifiedOnly
                  extras
                  qual
              ) =
-    let (importExtraHdr,importExtra) = maybe ([],[]) resolveExtra extras
-    in [unwords $ [ "import" ]
-               ++ resolveQualify qual
-               ++ [ resolvePkgImport pkgname
-                  , (concatModuleName moduleName :: String)
-                  ]
-               ++ resolveAs qual
-               ++ importExtraHdr
+    let (importExtraHdr,importExtra) = maybe ([],[]) (resolveExtra (padSpaces $ length mainClause + 2)) extras
+        mainClause = unwords $ [ "import" ]
+                            ++ resolveQualify qual
+                            ++ [ resolvePkgImport pkgname
+                               , (concatModuleName moduleName :: String)
+                               ]
+                           ++ resolveAs qual
+    in [ unwords [mainClause, unwords importExtraHdr]
        ] ++ importExtra
     where
         padSpaces n = replicate n ' '
@@ -311,22 +311,30 @@ formatImport ( anyHasQualifiedOnly
         emptyExtra = if hasHiding
                      then [padSpaces 6]
                      else []
-        resolveExtra InstancesOnly = resolveExtra' emptyExtra []
-        resolveExtra (ImportList imlist) = resolveExtra' emptyExtra imlist
-        resolveExtra (HidingList imlist) = resolveExtra' ["hiding"] imlist
-        resolveExtra' hdr l
+        resolveExtra tab InstancesOnly = resolveExtra' tab emptyExtra []
+        resolveExtra tab (ImportList imlist) = resolveExtra' tab emptyExtra imlist
+        resolveExtra tab (HidingList imlist) = resolveExtra' tab ["hiding"] imlist
+        resolveExtra' tab hdr l
             | length l <= 2 = ( hdr <> [formatImportFuncsOneLiner l]
                               , []
                               )
-            | otherwise = (hdr,formatImportFuncs l)
-        formatImportFuncs (x:xs) = [tab <> "( " <> x]
-                         ++ map (\x' -> tab <> ", " <> x' ) xs
-                         ++ [tab <> ")"]
-        tab = padSpaces 4
+            | otherwise =
+                let tab' = tab <> padSpaces (length $ concat emptyExtra)
+                    (x,xs) = formatImportFuncs l tab'
+                in (hdr ++ x, xs)
+        formatImportFuncs (x:xs) tab = ( ["( " <> x]
+                                       , map (\x' -> tab <> ", " <> x' ) xs
+                                         ++ [tab <> ")"]
+                                       )
+        tab'' = padSpaces 14
+        -- formatImportFuncsMultiLines (x:xs) = [tab <> "( " <> x]
+        --                                   ++ map (\x' -> tab <> ", " <> x' ) xs
+        --                                   ++ [tab <> ")"]
+        -- tab = padSpaces 4
         formatImportFuncsOneLiner [] = "()"
         formatImportFuncsOneLiner (x:xs) = "(" <> x
-                         <> concatMap (\x' -> ", " <> x' ) xs
-                         <> ")"
+                                        <> concatMap (\x' -> ", " <> x' ) xs
+                                        <> ")"
 
 moduleNameLength = length . intercalate "."
 
