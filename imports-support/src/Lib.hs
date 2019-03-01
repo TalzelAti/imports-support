@@ -32,15 +32,6 @@ import System.IO.Error
 import Debug.Trace
 lttrace a b = trace (a ++ ":" ++ show b) b
 
--- better control flags
--- todo: add option to annotate remove redundant files from package.yml
--- todo: add option to read errors from the compiler, and run only when there are import errors
--- todo: execute must be explicit, only --execute
--- todo add option to modify haskell files
--- todo: importify file (add package imports and labels)
--- todo: unimportify
--- todo: write tests for parser
--- todo: write tests for formatter
 
 removeIfExists :: FilePath -> IO ()
 removeIfExists fileName = removeFile fileName `catch` handleExists
@@ -71,27 +62,41 @@ someFunc = do
            <> showDefault
            <> help "runs imports support on a package provided in path or directory"
             )
-           <*> actionOpt
-        actionOpt :: Parser Action
-        actionOpt = actionFromPrint <$> switch
+           <*> printOpt
+           <*> viewOpt
+           <*> executeOpt
+        printOpt :: Parser Bool
+        printOpt = switch
             ( long "print"
            <> short 'p'
            <> showDefault
-           <> help "prints execution plan for path, and generates tempFiles"
+           <> help "prints execution plan for path"
+            )
+        viewOpt :: Parser Bool
+        viewOpt = switch
+            ( long "view"
+           <> short 'v'
+           <> showDefault
+           <> help ("generates tempFiles with prefix " ++ show prefixHeader ++ "in packages' dirs")
+            )
+        executeOpt :: Parser Bool
+        executeOpt = switch
+            ( long "execute"
+           <> showDefault
+           <> help "executes plan for path, use this option with Caution"
             )
 
 
-
 runCmd :: SearchOpts -> IO ()
-runCmd (SearchOpts dir actionToTake) = do
+runCmd (SearchOpts dir actionToTake _ _) = do
     cwd <- getCurrentDirectory
     let path = cwd </> dir
     packages <- findPackagesRecursively path
     case actionToTake of
-        Execute -> do
+        False -> do
             packages' <- prepare packages
             executePackageChanges False packages'
-        PrintPlan -> do
+        True -> do
             reports <- prepareReport packages
             putStrLn "Printing Report"
             forM_ reports $ \(hdr,tree) -> do
