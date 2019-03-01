@@ -283,7 +283,7 @@ formatImport ( anyHasQualifiedOnly
                      ++ resolveQualify qual
                      ++ [ resolvePkgImport pkgname
                         , (concatModuleName moduleName :: String)
-                        ] -- ++ resolveAs qual
+                        ] ++ resolveAs qual
              ]
     where
         padSpaces n = replicate n ' '
@@ -300,19 +300,21 @@ formatImport ( anyHasQualifiedOnly
         resolvePkgImport (Just nm) = "\""<> nm <> "\"" <> padSpaces (longestPackageImportName - length nm)
         resolvePkgImport Nothing = replicate (longestPackageImportName + 2) ' '
         resolveAs :: Qualified -> [String]
-        resolveAs QualDef = if anyHasQualifiedOnly || anyHasQualifiedAs
-                                 then [padSpaces $ 3 + longestAlias]
-                                 else []
-        resolveAs (QualOnlyAs nm) = ["as", intercalate "." nm,padSpaces (longestAlias - length nm)]
-        resolveAs (QualAs nm) = ["as", intercalate "." nm, padSpaces (longestAlias - length nm)]
+        resolveAs QualDef = [] -- if anyHasQualifiedOnly || anyHasQualifiedAs
+                                --  then [padSpaces $ 3 + longestAlias]
+                                --  else []
+        resolveAs (QualOnlyAs nm) = resolveAs' nm
+        resolveAs (QualAs nm) = resolveAs' nm
+        resolveAs' nm =  [padSpaces $ longestName - moduleNameLength moduleName ,"as", intercalate "." nm] --, padSpaces (longestAlias - length nm)]
+moduleNameLength = length . intercalate "."
 
 importCharLengthInfo :: [ImportStmt] -> (Bool,Int,Int,Bool,Int)
 importCharLengthInfo stmts =
     let hasQualifiedOnly = any (isQualifiedOnlyAs. _importStmtQualOnly_qualified) stmts
         hasQualifiedAs =  any (isQualifiedAs . _importStmtQualOnly_qualified) stmts
         longestPackageImportName = maximum $ map length $ catMaybes $ map _importStmtQualOnly_pkgImport stmts
-        longestName = maximum $ (++ [0]) $ map (length . intersperse "." . _importStmtQualOnly_moduleName) stmts
-        longestAlias = maximum $ (++ [0]) $ map (length . intersperse ".") $ catMaybes $ map (getAliasName . _importStmtQualOnly_qualified) stmts
+        longestName = maximum $ (++ [0]) $ map (moduleNameLength . _importStmtQualOnly_moduleName) stmts
+        longestAlias = maximum $ (++ [0]) $ map moduleNameLength $ catMaybes $ map (getAliasName . _importStmtQualOnly_qualified) stmts
     in ( hasQualifiedOnly
        , longestPackageImportName
        , longestName
