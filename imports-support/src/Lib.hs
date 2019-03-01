@@ -32,10 +32,11 @@ import System.IO.Error
 import Debug.Trace
 lttrace a b = trace (a ++ ":" ++ show b) b
 
+-- better control flags
 -- todo: add option to remove redundant files from package.yml
--- todo: imports formatter
 -- todo: importify file (add package imports and labels)
--- todo: write tests
+-- todo: write tests for parser
+-- todo: write tests for formatter
 
 removeIfExists :: FilePath -> IO ()
 removeIfExists fileName = removeFile fileName `catch` handleExists
@@ -45,11 +46,11 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
 
 someFunc :: IO ()
 someFunc = do
-    fileContent <- readFile "/home/talz/development/imports-support/test.hs"
-    let res = either error id $ parseString "/home/talz/development/imports-support/test.hs" fileContent
-    pPrint res
-    pPrint $ formatImports res
-    --execParser opts >>= runCmd
+    -- fileContent <- readFile "/home/talz/development/imports-support/test.hs"
+    -- let res = either error id $ parseString "/home/talz/development/imports-support/test.hs" fileContent
+    -- pPrint res
+    -- pPrint $ formatImports res
+    execParser opts >>= runCmd
     where
         opts = info (options <**> helper)
             ( fullDesc
@@ -160,8 +161,6 @@ isPackageYaml = isSuffixOf "package.yaml"
 isCabalFile :: [Char] -> Bool
 isCabalFile = isSuffixOf ".cabal"
 
-
-
 annotatePackage :: WorkTree -> IO WorkTree
 annotatePackage (Directory nm _ subdirs) = return $ Directory nm NoAnnotation subdirs
 annotatePackage (Package packagePath _) = do
@@ -189,7 +188,7 @@ getPkgsModifications (Package path (PackageAnnot (PkgsYaml pyfp:hsfs))) = do
     let packagesList = nub $ concatMap getPackageNames $
             map snd $ filter fst $
             map (faHasPackageImports &&& faImportsList) hsfs
-    return $ Package path $ PkgsFileMods pyfp packagesList
+    return $ Package path $ PackageUpdate $[PkgsFileUpdate pyfp packagesList]
 getPkgsModifications dir = return dir
 
 getPackageNames :: [ImportStmt] -> [String]
@@ -200,7 +199,7 @@ executePackageModification copyOnly wt = mapM_ worker $ mods
         where
             mods = universeBi wt
             worker (ErrMsg err) = pPrint err
-            worker (PkgsFileMods fp pkgs) = do
+            worker (PackageUpdate [PkgsFileUpdate fp pkgs]) = do
                 packageYamlContent <- readFile fp
                 let modifiedContent = modifyPackagesSection pkgs packageYamlContent
                     tempFile = addTempPrefix fp

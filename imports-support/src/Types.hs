@@ -25,8 +25,11 @@ data WorkTree = Package FilePath Annotation
 data Annotation = PackageAnnot [FileAnnot]
                 | ErrMsg String
                 | NoAnnotation
-                | PkgsFileMods FilePath [String]
+                | PackageUpdate [FileUpdate]
                 deriving (Show,Data,Typeable)
+
+data FileUpdate = PkgsFileUpdate FilePath [String]
+    deriving (Show,Data,Typeable)
 
 data FileAnnot =
     HsFileAnnot
