@@ -12,12 +12,16 @@ import                                Imports.Support.Parser.Types
 data Action = PrintPlan
             | Execute
 
-data SearchOpts = SearchOpts
-                 { _searchOpts_dir :: FilePath
-                 , _searchOpts_print :: Bool
-                 , _searchOpts_view :: Bool
-                 , _searchOpts_execute :: Bool
+data Options = Options
+                 { _options_dir :: FilePath
+                 , _options_print :: Bool
+                 , _options_view :: Bool
+                 , _options_execute :: Bool
                  }
+    | PrintOpt {_printOpt_dir :: FilePath}
+    | ViewOpt {_viewOpt_dir :: FilePath}
+    | ExecuteOpt {_executeOpt_dir :: FilePath}
+
 actionFromPrint :: Bool -> Action
 actionFromPrint True = PrintPlan
 actionFromPrint _    = Execute

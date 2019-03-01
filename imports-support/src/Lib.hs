@@ -23,6 +23,7 @@ import                                Types
 import                                Imports.Support.Parser
 import                                Imports.Support.Parser.Types
 import                                Imports.Support.Formatter
+import qualified "base"                      Data.Foldable as F
 
 import Control.Exception
 --import Debug.Trace
@@ -47,48 +48,72 @@ someFunc = do
     -- pPrint $ formatImports res
     execParser opts >>= runCmd
     where
-        opts = info (options <**> helper)
+        opts = info (optionsParser <**> helper)
             ( fullDesc
            <> progDesc "Run Import Support"
             )
-        options :: Parser SearchOpts
-        options = packageOpt
+        options :: Parser Options
+        options = Options
+            <$> packageOpt
+            <*> printOpt'
+            <*> viewOpt'
+            <*> executeOpt'
 
-        packageOpt :: Parser SearchOpts
-        packageOpt = SearchOpts <$>
-           strOption
-            ( long "filepath"
-           <> short 'd'
-           <> showDefault
-           <> help "runs imports support on a package provided in path or directory"
-            )
-           <*> printOpt
-           <*> viewOpt
-           <*> executeOpt
-        printOpt :: Parser Bool
-        printOpt = switch
+        printOpt' :: Parser Bool
+        printOpt' = switch
             ( long "print"
            <> short 'p'
            <> showDefault
            <> help "prints execution plan for path"
             )
-        viewOpt :: Parser Bool
-        viewOpt = switch
+        viewOpt' :: Parser Bool
+        viewOpt' = switch
             ( long "view"
            <> short 'v'
            <> showDefault
-           <> help ("generates tempFiles with prefix " ++ show prefixHeader ++ "in packages' dirs")
+           <> help ("generates tempFiles with prefix " ++ show prefixHeader ++ " in packages' dirs")
             )
-        executeOpt :: Parser Bool
-        executeOpt = switch
+        executeOpt' :: Parser Bool
+        executeOpt' = switch
             ( long "execute"
            <> showDefault
            <> help "executes plan for path, use this option with Caution"
             )
 
+packageOpt :: Parser FilePath
+packageOpt =
+   strOption
+    ( long "filepath"
+   <> short 'd'
+   <> showDefault
+   <> help "runs imports support on a package provided in path or directory"
+    )
 
-runCmd :: SearchOpts -> IO ()
-runCmd (SearchOpts dir actionToTake _ _) = do
+
+cmdWithHelp :: String
+            -> String
+            -> Parser a
+            -> Mod CommandFields a
+cmdWithHelp cmdName desc options =
+    command
+        cmdName $
+        info
+            (helper <*> options)
+            (fullDesc <> progDesc desc)
+
+subparsersWithHelp :: [(String,String, Parser a)] -> Parser a
+subparsersWithHelp = subparser . F.foldMap (\(x, y, z) -> cmdWithHelp x y z)
+
+optionsParser :: Parser Options
+optionsParser = subparsersWithHelp
+    [ ("print"   , "Prints execution plan for path"             , PrintOpt <$> packageOpt)
+    , ("view"    , "Generates tempFiles with prefix " ++ show prefixHeader ++ "in packages' dirs" , ViewOpt <$> packageOpt)
+    , ("execute" , "Executes plan for path, use this option with Caution", ExecuteOpt <$> packageOpt)
+    ]
+
+
+runCmd :: Options -> IO ()
+runCmd (Options dir actionToTake _ _) = do
     cwd <- getCurrentDirectory
     let path = cwd </> dir
     packages <- findPackagesRecursively path
@@ -107,6 +132,35 @@ runCmd (SearchOpts dir actionToTake _ _) = do
                 pPrint ("############################" :: Text)
                 putStrLn ""
                 executePackageChanges True $ snd $ last reports
+
+runCmd (PrintOpt dir) =  do
+    cwd <- getCurrentDirectory
+    let path = cwd </> dir
+    packages <- findPackagesRecursively path
+    reports <- prepareReport packages
+    putStrLn "Printing Report"
+    forM_ reports $ \(hdr,tree) -> do
+        putStrLn ("### " ++ hdr )
+        putStrLn ""
+        pPrint tree
+        putStrLn ""
+        pPrint ("############################" :: Text)
+
+runCmd (ViewOpt dir) =  do
+    cwd <- getCurrentDirectory
+    let path = cwd </> dir
+    packages <- findPackagesRecursively path
+    packages' <- prepare packages
+
+    executePackageChanges True packages
+
+runCmd (ExecuteOpt dir) =  do
+    cwd <- getCurrentDirectory
+    let path = cwd </> dir
+    packages <- findPackagesRecursively path
+    packages' <- prepare packages
+    executePackageChanges False packages'
+
 
 
 prepareReport :: WorkTree -> IO [(String,WorkTree)]
