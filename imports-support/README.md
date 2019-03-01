@@ -7,11 +7,8 @@
 
 ### short term
 - fix formatter error
-- readd warning flags
+- refactor run cmd
 - add better control flags.
--- default: prints report
--- view: print temp files
--- execute: executes changes, explicit flag
 -- delete-temp: delete temp files
 - add option to annotate and remove redundant packages from package.yml
 - todo add option to modify haskell files

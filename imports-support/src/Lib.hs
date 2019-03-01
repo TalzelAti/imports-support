@@ -25,7 +25,6 @@ import                                Imports.Support.Parser.Types
 import                                Imports.Support.Formatter
 
 import Control.Exception
---import Debug.Trace
 import System.IO.Error
 import           "optparse-applicative"      Options.Applicative
 
