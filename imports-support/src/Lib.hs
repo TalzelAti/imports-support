@@ -178,17 +178,17 @@ annotatePackage (Package packagePath _) = do
                     Left err -> Left $ ErrMsg err
                     Right stmts -> Right $ HsFileAnnot hsFile hasPackageImports stmts
             return $ case partitionEithers fsAnns of
-                ([],fsAnns') -> PackageAnnot (PkgsYaml f:fsAnns')
+                ([],fsAnns') -> PackageAnnot (PkgsYaml f:fsAnns') []
                 (errs,_) -> head errs
 
     return $ Package packagePath annot
 
 getPkgsModifications :: WorkTree -> IO WorkTree
-getPkgsModifications (Package path (PackageAnnot (PkgsYaml pyfp:hsfs))) = do
+getPkgsModifications (Package path (PackageAnnot annons@(PkgsYaml pyfp:hsfs) [])) = do
     let packagesList = nub $ concatMap getPackageNames $
             map snd $ filter fst $
             map (faHasPackageImports &&& faImportsList) hsfs
-    return $ Package path $ PackageUpdate $[PkgsFileUpdate pyfp packagesList]
+    return $ Package path $ PackageAnnot annons [PkgsFileUpdate pyfp packagesList]
 getPkgsModifications dir = return dir
 
 getPackageNames :: [ImportStmt] -> [String]
@@ -199,7 +199,7 @@ executePackageModification copyOnly wt = mapM_ worker $ mods
         where
             mods = universeBi wt
             worker (ErrMsg err) = pPrint err
-            worker (PackageUpdate [PkgsFileUpdate fp pkgs]) = do
+            worker (PackageAnnot _ [PkgsFileUpdate fp pkgs]) = do
                 packageYamlContent <- readFile fp
                 let modifiedContent = modifyPackagesSection pkgs packageYamlContent
                     tempFile = addTempPrefix fp

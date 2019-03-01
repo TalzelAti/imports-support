@@ -22,10 +22,12 @@ data WorkTree = Package FilePath Annotation
               | Directory FilePath Annotation [WorkTree]
             deriving (Show, Data, Typeable)
 
-data Annotation = PackageAnnot [FileAnnot]
-                | ErrMsg String
+data Annotation = PackageAnnot
+                 {_packageAnnot_filesAnnot :: [FileAnnot]
+                 , _packageAnnot_filesUpdate :: [FileUpdate]
+                 }
+                | ErrMsg { _errMsg_errorMessage :: String }
                 | NoAnnotation
-                | PackageUpdate [FileUpdate]
                 deriving (Show,Data,Typeable)
 
 data FileUpdate = PkgsFileUpdate FilePath [String]
