@@ -37,6 +37,7 @@ lttrace a b = trace (a ++ ":" ++ show b) b
 -- todo: importify file (add package imports and labels)
 -- todo: write tests for parser
 -- todo: write tests for formatter
+-- todo: add option to read errors from the compiler, and run only when there are import errors
 
 removeIfExists :: FilePath -> IO ()
 removeIfExists fileName = removeFile fileName `catch` handleExists
@@ -86,7 +87,7 @@ runCmd (SearchOpts dir actionToTake) = do
     case actionToTake of
         Execute -> do
             packages' <- prepare packages
-            executePackageModification False packages'
+            executePackageChanges False packages'
         PrintPlan -> do
             reports <- prepareReport packages
             putStrLn "Printing Report"
@@ -97,7 +98,7 @@ runCmd (SearchOpts dir actionToTake) = do
                 putStrLn ""
                 pPrint ("############################" :: Text)
                 putStrLn ""
-                executePackageModification True $ snd $ last reports
+                executePackageChanges True $ snd $ last reports
 
 
 prepareReport :: WorkTree -> IO [(String,WorkTree)]
@@ -176,7 +177,7 @@ annotatePackage (Package packagePath _) = do
                     hasPackageImports = any isPackageImports . lines $ hsFileContent
                 return $ case parseString hsFile $ unlines importsList of
                     Left err -> Left $ ErrMsg err
-                    Right stmts -> Right $ HsFileAnnot hsFile hasPackageImports stmts
+                    Right stmts -> Right $ HsFileAnnot hsFile hasPackageImports importsList stmts
             return $ case partitionEithers fsAnns of
                 ([],fsAnns') -> PackageAnnot (PkgsYaml f:fsAnns') []
                 (errs,_) -> head errs
@@ -194,24 +195,27 @@ getPkgsModifications dir = return dir
 getPackageNames :: [ImportStmt] -> [String]
 getPackageNames = nub . removeBaseModule . catMaybes . map _importStmtQualOnly_pkgImport
 
-executePackageModification :: Bool -> WorkTree -> IO ()
-executePackageModification copyOnly wt = mapM_ worker $ mods
+executePackageChanges :: Bool -> WorkTree -> IO ()
+executePackageChanges copyOnly wt = mapM_ worker $ mods
         where
             mods = universeBi wt
             worker (ErrMsg err) = pPrint err
-            worker (PackageAnnot _ [PkgsFileUpdate fp pkgs]) = do
-                packageYamlContent <- readFile fp
-                let modifiedContent = modifyPackagesSection pkgs packageYamlContent
-                    tempFile = addTempPrefix fp
-                removeIfExists tempFile
-                writeFile tempFile $ modifiedContent
-                if copyOnly
-                    then do
-                        return ()
-                    else do
-                        copyFile tempFile fp
-                        removeIfExists tempFile
-            worker _ = return ()
+            worker (PackageAnnot _ updates) = mapM_ (executeFileUpdate copyOnly) updates
+            worker NoAnnotation = return ()
+
+executeFileUpdate :: Bool -> FileUpdate -> IO ()
+executeFileUpdate copyOnly (PkgsFileUpdate fp pkgs) = do
+    packageYamlContent <- readFile fp
+    let modifiedContent = modifyPackagesSection pkgs packageYamlContent
+        tempFile = addTempPrefix fp
+    removeIfExists tempFile
+    writeFile tempFile $ modifiedContent
+    if copyOnly
+        then do
+            return ()
+        else do
+            copyFile tempFile fp
+            removeIfExists tempFile
 
 modifyPackagesSection :: [String] -> String -> String
 modifyPackagesSection packages fileContent =

@@ -23,22 +23,30 @@ data WorkTree = Package FilePath Annotation
             deriving (Show, Data, Typeable)
 
 data Annotation = PackageAnnot
-                 {_packageAnnot_filesAnnot :: [FileAnnot]
-                 , _packageAnnot_filesUpdate :: [FileUpdate]
-                 }
+                    {_packageAnnot_filesAnnot :: [FileAnnot]
+                    , _packageAnnot_filesUpdate :: [FileUpdate]
+                    }
                 | ErrMsg { _errMsg_errorMessage :: String }
                 | NoAnnotation
                 deriving (Show,Data,Typeable)
 
 data FileUpdate = PkgsFileUpdate FilePath [String]
-    deriving (Show,Data,Typeable)
+                | HsFileUpdate
+                    { hfuName :: FilePath
+                    , hfuHasPackageImports ::Bool
+                    , hfuImports :: [String]
+                    , hfuImports_stmts :: [ImportStmt]
+                    , hfuImports_new :: [String]
+                    }
+                deriving (Show,Data,Typeable)
 
 data FileAnnot =
     HsFileAnnot
-        { faName :: FilePath
-        , faHasPackageImports ::Bool
-        , faImportsList :: [ImportStmt]
-        }
+       { faName :: FilePath
+       , faHasPackageImports ::Bool
+       , faImports :: [String]
+       , faImportsList :: [ImportStmt]
+       }
     | PkgsYaml String
     deriving (Show,Data,Typeable)
 
