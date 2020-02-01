@@ -4,9 +4,9 @@
 module Types where
 
 import                                Data.Typeable
-import           "base"                Data.Data
-import           "base"                Data.List
-import           "filepath"            System.FilePath
+import           "base"               Data.Data
+import           "base"               Data.List
+import           "filepath"           System.FilePath
 import                                Imports.Support.Parser.Types
 
 data WorkTree = Package FilePath Annotation

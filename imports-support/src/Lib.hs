@@ -18,12 +18,13 @@ import           "uniplate"         Data.Generics.Uniplate.Data
 import           "base"               Control.Arrow
 import           "text"                     Data.Text (Text)
 import           "filepath"            System.FilePath
+import qualified "haskell-src-exts" Language.Haskell.Exts as H
 import                                Types
 import                                Imports.Support.CLI
 import                                Imports.Support.Parser
 import                                Imports.Support.Parser.Types
 import                                Imports.Support.Formatter
-
+import System.Directory
 import Control.Exception
 import System.IO.Error
 import           "optparse-applicative"      Options.Applicative
@@ -153,12 +154,17 @@ annotatePackage (Package packagePath _) = do
         Nothing -> return $ ErrMsg $ "Error: No stack file in package: " ++ show packagePath
         Just f  -> do
             fsAnns <- forM haskellFiles $ \hsFile -> do
-                hsFileContent <- readFile hsFile
-                let importsList = findImportLines . lines $  hsFileContent -- optimize the readFile call
-                    hasPackageImports = any isPackageImports . lines $ hsFileContent
-                return $ case parseString hsFile $ unlines importsList of
-                    Left err -> Left $ ErrMsg err
-                    Right stmts -> Right $ HsFileAnnot hsFile hasPackageImports importsList stmts
+                parsedResult <- H.parseFile hsFile
+                (importedModules, modulePragma) <- case parsedResult of
+                    H.ParseOk (H.Module _ _ pragma importDecls _)  -> return ( importDecls, pragma )
+                    H.ParseFailed _ errorReason -> error errorReason
+                return $  HsFileAnnot hsFile modulePragma importedModules
+                --hsFileContent <- readFile hsFile
+                --let importsList = findImportLines . lines $  hsFileContent -- optimize the readFile call
+                --    hasPackageImports = any isPackageImports . lines $ hsFileContent
+                --return $ case parseString hsFile $ unlines importsList of
+                --    Left err -> Left $ ErrMsg err
+                --    Right stmts -> Right $ HsFileAnnot hsFile hasPackageImports importsList stmts
             return $ case partitionEithers fsAnns of
                 ([],fsAnns') -> PackageAnnot (PkgsYaml f:fsAnns') []
                 (errs,_) -> head errs

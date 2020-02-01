@@ -25,16 +25,15 @@ dependencies:
 - extra
 - filepath
 - optparse-applicative
+- optparse-generics
 - pretty-simple
 - text
 - uniplate
 - parsec
+- haskell-src-exts
 
 library:
   source-dirs: src
-  ghc-options:
-    - -Wall
-    - -Werror
 
 executables:
   imports-support-exe:
